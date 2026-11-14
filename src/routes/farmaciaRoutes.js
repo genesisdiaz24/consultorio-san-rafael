@@ -12,9 +12,16 @@ router.get('/inventario/ia-estimaciones', requiereRol('FARMACIA'), farmaciaContr
 router.post('/inventario', requiereRol('ADMINISTRADOR'), farmaciaController.crearMedicamento);
 router.post('/inventario/:id/ajustar', requiereRol('FARMACIA'), farmaciaController.ajustarStock);
 
+// Precio y cobertura de ARS por medicamento: Farmacia puede verla; solo el Administrador la modifica
+router.get('/inventario/:id/coberturas', requiereRol('FARMACIA'), farmaciaController.verCoberturas);
+router.post('/inventario/:id/precio', requiereRol('ADMINISTRADOR'), farmaciaController.actualizarPrecio);
+router.post('/inventario/:id/coberturas', requiereRol('ADMINISTRADOR'), farmaciaController.guardarCobertura);
+router.post('/inventario/:id/coberturas/:coberturaId/eliminar', requiereRol('ADMINISTRADOR'), farmaciaController.eliminarCobertura);
+
 // Dispensación de recetas y auditoría (Exclusivo FARMACIA y Administrador)
 router.get('/dispensar', requiereRol('FARMACIA'), farmaciaController.colaDispensacion);
 router.get('/dispensar/:id', requiereRol('FARMACIA'), farmaciaController.verRecetaDispensar);
+router.get('/dispensar/:id/comprobante', requiereRol('FARMACIA'), farmaciaController.comprobanteDespacho);
 router.post('/dispensar/:detalleId/entregar', requiereRol('FARMACIA'), farmaciaController.entregarItem);
 router.post('/dispensar/:detalleId/no-entregar', requiereRol('FARMACIA'), farmaciaController.noEntregarItem);
 router.get('/movimientos', requiereRol('FARMACIA'), farmaciaController.movimientos);

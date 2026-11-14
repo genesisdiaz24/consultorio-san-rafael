@@ -5,47 +5,47 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
         <h1 class="h3 fw-bold text-dark mb-1">
-          <i class="bi bi-shield-plus text-teal me-2"></i>Registrar Nueva ARS
+          <i class="bi bi-shield-plus text-teal me-2"></i><%= esEdicion ? 'Editar ARS' : 'Registrar Nueva ARS' %>
         </h1>
-        <p class="text-muted mb-0">Ingrese los datos generales de la Administradora de Riesgos de Salud.</p>
+        <p class="text-muted mb-0"><%= esEdicion ? 'Actualice los datos de la aseguradora.' : 'Ingrese los datos generales de la Administradora de Riesgos de Salud.' %></p>
       </div>
       <a href="/ars" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i> Volver al listado
       </a>
     </div>
 
-    <form action="/ars" method="POST">
+    <form action="<%= esEdicion ? '/ars/' + ars.id + '/editar' : '/ars' %>" method="POST">
       <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-4">
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label fs-7 fw-semibold">Nombre de la ARS / Aseguradora <span class="text-danger">*</span></label>
-              <input type="text" name="nombre" class="form-control" placeholder="Ej: Senasa Contributivo / ARS Humano..." required>
+              <input type="text" name="nombre" class="form-control" placeholder="Ej: Senasa Contributivo / ARS Humano..." required value="<%= ars.nombre || '' %>">
             </div>
 
             <div class="col-12 col-md-6">
               <label class="form-label fs-7 fw-semibold">Código Identificador</label>
-              <input type="text" name="codigo" class="form-control font-monospace" placeholder="Ej: SEN-01">
+              <input type="text" name="codigo" class="form-control font-monospace" placeholder="Ej: SEN-01" value="<%= ars.codigo || '' %>">
             </div>
 
             <div class="col-12 col-md-6">
               <label class="form-label fs-7 fw-semibold">Teléfono de Autorizaciones</label>
-              <input type="tel" name="telefono" class="form-control" placeholder="Ej: 809-555-0000">
+              <input type="tel" name="telefono" class="form-control" placeholder="Ej: 809-555-0000" value="<%= ars.telefono || '' %>">
             </div>
 
             <div class="col-12 col-md-6">
               <label class="form-label fs-7 fw-semibold">Correo de Prestadores</label>
-              <input type="email" name="correo" class="form-control" placeholder="autorizaciones@ars.com.do">
+              <input type="email" name="correo" class="form-control" placeholder="autorizaciones@ars.com.do" value="<%= ars.correo || '' %>">
             </div>
 
             <div class="col-12 col-md-6">
               <label class="form-label fs-7 fw-semibold">Contacto o Gestor Médico</label>
-              <input type="text" name="contacto_nombre" class="form-control" placeholder="Ej: Lic. Ramírez">
+              <input type="text" name="contacto_nombre" class="form-control" placeholder="Ej: Lic. Ramírez" value="<%= ars.contacto_nombre || '' %>">
             </div>
 
             <div class="col-12">
               <label class="form-label fs-7 fw-semibold">Notas o Condiciones del Convenio</label>
-              <textarea name="notas" rows="2" class="form-control" placeholder="Ej: Requiere autorización previa para procedimientos especiales..."></textarea>
+              <textarea name="notas" rows="2" class="form-control" placeholder="Ej: Requiere autorización previa para procedimientos especiales..."><%= ars.notas || '' %></textarea>
             </div>
           </div>
         </div>
@@ -54,7 +54,7 @@
       <div class="d-flex justify-content-end gap-2 mb-5">
         <a href="/ars" class="btn btn-outline-secondary px-4">Cancelar</a>
         <button type="submit" class="btn btn-teal fw-semibold px-5 shadow-sm">
-          <i class="bi bi-check2-circle me-1"></i> <%= (usuarioActual && usuarioActual.rol === 'ADMINISTRADOR') ? 'Guardar y Configurar Tarifas' : 'Guardar Aseguradora' %>
+          <i class="bi bi-check2-circle me-1"></i> <%= esEdicion ? 'Guardar Cambios' : 'Guardar y Configurar Tarifas' %>
         </button>
       </div>
     </form>

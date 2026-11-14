@@ -182,6 +182,7 @@
             <th>Código</th>
             <th>Medicamento &amp; Concentración</th>
             <th>Presentación</th>
+            <th class="text-end">Precio unit.</th>
             <th class="text-center">Existencias</th>
             <th class="text-center">Sugerencia IA</th>
             <th>Lote / Vencimiento</th>
@@ -204,6 +205,9 @@
                 </td>
                 <td>
                   <span class="badge bg-light text-dark border"><%= m.presentacion %></span>
+                </td>
+                <td class="text-end fw-semibold">
+                  <%= Number(m.precio_unitario) > 0 ? formatoMoneda(m.precio_unitario) : '—' %>
                 </td>
                 <td class="text-center">
                   <% if (m.stock_actual <= 0) { %>
@@ -234,12 +238,15 @@
                   <button type="button" class="btn btn-sm btn-outline-teal" data-id="<%= m.id %>" data-nombre="<%= m.nombre %>" data-stock="<%= m.stock_actual %>" onclick="abrirModalAjustar(this.dataset.id, this.dataset.nombre, this.dataset.stock)">
                     <i class="bi bi-plus-slash-minus me-1"></i> Ajustar Stock
                   </button>
+                  <a href="/farmacia/inventario/<%= m.id %>/coberturas" class="btn btn-sm btn-outline-secondary mt-1 mt-xl-0">
+                    <i class="bi bi-shield-check me-1"></i> Cobertura ARS
+                  </a>
                 </td>
               </tr>
             <% }); %>
           <% } else { %>
             <tr>
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="9" class="text-center py-5 text-muted">
                 <i class="bi bi-capsule fs-1 d-block mb-2 text-teal-light"></i>
                 <h6 class="fw-bold text-dark">No hay medicamentos encontrados</h6>
                 <p class="mb-3">Agregue medicamentos al catálogo para comenzar la gestión de stock.</p>
@@ -312,6 +319,11 @@
             <div class="col-12 col-md-4">
               <label class="form-label fs-7 fw-semibold">Ubicación / Estante</label>
               <input type="text" name="ubicacion" class="form-control" placeholder="Estante B-2">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Precio por unidad (RD$)</label>
+              <input type="number" step="0.01" min="0" name="precio_unitario" class="form-control" value="0.00">
+              <small class="text-muted fs-8">La cobertura por ARS se configura después en "Cobertura ARS".</small>
             </div>
           </div>
         </div>

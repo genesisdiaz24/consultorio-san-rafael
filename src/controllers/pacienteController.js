@@ -42,7 +42,7 @@ exports.listar = async (req, res, next) => {
 exports.formularioCrear = async (req, res, next) => {
   try {
     const { rows: arsList } = await db.query(
-      `SELECT id, nombre FROM ars WHERE activo = true ORDER BY nombre ASC`
+      `SELECT id, nombre FROM ars WHERE activo = true AND UPPER(COALESCE(codigo, '')) <> 'PRIV' ORDER BY nombre ASC`
     );
     res.render('pacientes/form', {
       paciente: {},
@@ -252,7 +252,7 @@ exports.formularioEditar = async (req, res, next) => {
     }
 
     const { rows: arsList } = await db.query(
-      `SELECT id, nombre FROM ars WHERE activo = true ORDER BY nombre ASC`
+      `SELECT id, nombre FROM ars WHERE activo = true AND UPPER(COALESCE(codigo, '')) <> 'PRIV' ORDER BY nombre ASC`
     );
 
     res.render('pacientes/form', {

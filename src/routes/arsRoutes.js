@@ -20,6 +20,9 @@ router.get('/:id/tarifas', requiereRol('SECRETARIA', 'RECEPCION'), arsController
 router.get('/nueva', requiereRol('ADMINISTRADOR'), arsController.formularioCrear);
 router.post('/', requiereRol('ADMINISTRADOR'), arsController.crear);
 router.post('/:id/tarifas', requiereRol('ADMINISTRADOR'), arsController.guardarTarifa);
+router.get('/:id/editar', requiereRol('ADMINISTRADOR'), arsController.formularioEditar);
+router.post('/:id/editar', requiereRol('ADMINISTRADOR'), arsController.actualizar);
+router.post('/:id/estado', requiereRol('ADMINISTRADOR'), arsController.cambiarEstado);
 router.post('/:id/tarifas/:tarifaId/eliminar', requiereRol('ADMINISTRADOR'), arsController.eliminarTarifa);
 
 module.exports = router;

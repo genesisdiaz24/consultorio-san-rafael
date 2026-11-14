@@ -1,6 +1,7 @@
 const app = require('./app');
 const db = require('./config/db');
 const initDatabase = require('./database/init-db');
+const { ejecutarMigraciones } = require('./database/migraciones');
 require('dotenv').config();
 
 const PORT = process.env.PORT || 3000;
@@ -34,6 +35,8 @@ async function startServer() {
         await initDatabase();
       }
     }
+    // Aplicar cambios de esquema nuevos sobre bases de datos ya existentes (idempotente)
+    await ejecutarMigraciones();
     console.log(`✔ Conexión a PostgreSQL establecida con éxito.`);
     console.log(`  Base de datos: ${status.database}`);
     console.log(`  Hora del servidor DB: ${status.time}`);

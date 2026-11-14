@@ -38,7 +38,7 @@
         <tbody>
           <% if (arsList && arsList.length > 0) { %>
             <% arsList.forEach(function(ars) { %>
-              <tr>
+              <tr class="<%= ars.activo === false ? 'table-secondary opacity-75' : '' %>">
                 <td>
                   <span class="badge bg-light text-dark border font-monospace">
                     <%= ars.codigo || 'S/C' %>
@@ -46,6 +46,7 @@
                 </td>
                 <td>
                   <strong class="text-dark fs-6"><%= ars.nombre %></strong>
+                  <% if (ars.activo === false) { %><span class="badge bg-secondary ms-1">Desactivada</span><% } %>
                   <% if (ars.notas) { %>
                     <small class="text-muted d-block"><%= ars.notas %></small>
                   <% } %>
@@ -68,9 +69,20 @@
                 </td>
                 <td class="text-end">
                   <% if (esAdminArs) { %>
-                    <a href="/ars/<%= ars.id %>/tarifas" class="btn btn-sm btn-teal fw-semibold">
-                      <i class="bi bi-sliders me-1"></i> Configurar Tarifario
-                    </a>
+                    <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                      <a href="/ars/<%= ars.id %>/tarifas" class="btn btn-sm btn-teal fw-semibold">
+                        <i class="bi bi-sliders me-1"></i> Configurar Tarifario
+                      </a>
+                      <a href="/ars/<%= ars.id %>/editar" class="btn btn-sm btn-outline-secondary" title="Editar ARS">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                      <form action="/ars/<%= ars.id %>/estado" method="POST" class="d-inline">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button type="submit" class="btn btn-sm <%= ars.activo === false ? 'btn-outline-success' : 'btn-outline-danger' %>" title="<%= ars.activo === false ? 'Activar ARS' : 'Desactivar ARS' %>">
+                          <i class="bi <%= ars.activo === false ? 'bi-toggle-off' : 'bi-toggle-on' %>"></i> <%= ars.activo === false ? 'Activar' : 'Desactivar' %>
+                        </button>
+                      </form>
+                    </div>
                   <% } else { %>
                     <a href="/ars/<%= ars.id %>/tarifas" class="btn btn-sm btn-outline-teal fw-semibold">
                       <i class="bi bi-eye me-1"></i> Ver Tarifas

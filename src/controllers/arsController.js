@@ -84,6 +84,81 @@ exports.crear = async (req, res, next) => {
   }
 };
 
+// Formulario de edición de una ARS (solo Administrador)
+exports.formularioEditar = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`SELECT * FROM ars WHERE id = $1`, [parseInt(req.params.id, 10) || 0]);
+    if (rows.length === 0) {
+      req.flash('error', 'ARS no encontrada.');
+      return res.redirect('/ars');
+    }
+    res.render('ars/form', { ars: rows[0], esEdicion: true, title: `Editar ARS: ${rows[0].nombre}` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Guardar cambios de una ARS (solo Administrador)
+exports.actualizar = async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10) || 0;
+    const { nombre, codigo, telefono, correo, contacto_nombre, notas } = req.body;
+    if (!nombre || !nombre.trim()) {
+      req.flash('error', 'El nombre de la ARS es obligatorio.');
+      return res.redirect(`/ars/${id}/editar`);
+    }
+    const { rows: duplicada } = await db.query(
+      `SELECT id FROM ars WHERE (nombre ILIKE $1 OR (codigo IS NOT NULL AND codigo = $2)) AND id <> $3`,
+      [nombre.trim(), codigo ? codigo.trim() : null, id]
+    );
+    if (duplicada.length > 0) {
+      req.flash('error', 'Ya existe otra ARS con ese nombre o código.');
+      return res.redirect(`/ars/${id}/editar`);
+    }
+    const { rowCount } = await db.query(
+      `UPDATE ars SET nombre = $1, codigo = $2, telefono = $3, correo = $4, contacto_nombre = $5, notas = $6 WHERE id = $7`,
+      [
+        nombre.trim(),
+        codigo ? codigo.trim() : null,
+        telefono ? telefono.trim() : null,
+        correo ? correo.trim() : null,
+        contacto_nombre ? contacto_nombre.trim() : null,
+        notas ? notas.trim() : null,
+        id,
+      ]
+    );
+    req.flash(rowCount ? 'success' : 'error', rowCount ? `ARS "${nombre.trim()}" actualizada.` : 'ARS no encontrada.');
+    return res.redirect('/ars');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Activar / desactivar una ARS (solo Administrador). Desactivada: no aparece para nuevos pacientes
+// y sus afiliados dejan de recibir cobertura en farmacia.
+exports.cambiarEstado = async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10) || 0;
+    const { rows } = await db.query(
+      `UPDATE ars SET activo = NOT activo WHERE id = $1 RETURNING nombre, activo`,
+      [id]
+    );
+    if (rows.length === 0) {
+      req.flash('error', 'ARS no encontrada.');
+    } else {
+      req.flash(
+        'success',
+        rows[0].activo
+          ? `ARS "${rows[0].nombre}" activada.`
+          : `ARS "${rows[0].nombre}" desactivada: ya no se ofrece en el registro de pacientes y sus afiliados no reciben cobertura en farmacia.`
+      );
+    }
+    return res.redirect('/ars');
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Ver y gestionar tarifarios de una ARS específica
 exports.verTarifas = async (req, res, next) => {
   try {
