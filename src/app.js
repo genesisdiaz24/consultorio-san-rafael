@@ -18,8 +18,9 @@ if (esProduccion || process.env.TRUST_PROXY === 'true') {
   app.set('trust proxy', 1);
 }
 
-// Comprobación de salud para Cloud Run (no requiere sesión ni base de datos)
-app.get('/healthz', (req, res) => res.status(200).json({ status: 'ok' }));
+// Comprobación de salud (no requiere sesión ni base de datos).
+// No usar /healthz: Cloud Run reserva las rutas que terminan en "z" y responde 404.
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
 // 1. Cabeceras de Seguridad y Control de Origen
 app.use(helmetConfig);
