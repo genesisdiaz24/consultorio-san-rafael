@@ -1,0 +1,96 @@
+<%- include('../partials/header') %>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-clock-history text-teal me-2"></i>Auditoría y Movimientos de Farmacia
+    </h1>
+    <p class="text-muted mb-0">Registro histórico de salidas por receta, entradas de stock y registros de medicamentos sin existencia.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/farmacia/inventario" class="btn btn-outline-teal fw-semibold">
+      <i class="bi bi-boxes me-1"></i> Ver Inventario
+    </a>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light fs-8 text-uppercase">
+          <tr>
+            <th>Fecha y Hora</th>
+            <th>Tipo de Movimiento</th>
+            <th>Medicamento</th>
+            <th class="text-center">Cantidad</th>
+            <th class="text-center">Stock Antes / Después</th>
+            <th>Motivo / Receta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (movimientos && movimientos.length > 0) { %>
+            <% movimientos.forEach(function(m) { %>
+              <tr>
+                <td>
+                  <span class="fw-semibold text-dark"><%= formatoFecha(m.fecha) %></span>
+                  <small class="d-block text-muted">
+                    <%= new Date(m.fecha).toLocaleTimeString('es-DO', {hour:'2-digit', minute:'2-digit'}) %>
+                  </small>
+                </td>
+                <td>
+                  <% if (m.tipo_movimiento === 'SALIDA_RECETA') { %>
+                    <span class="badge bg-success py-2 px-3">
+                      <i class="bi bi-box-arrow-up-right me-1"></i> Salida por Receta
+                    </span>
+                  <% } else if (m.tipo_movimiento === 'NO_ENTREGADO_SIN_STOCK') { %>
+                    <span class="badge bg-danger py-2 px-3">
+                      <i class="bi bi-exclamation-triangle-fill me-1"></i> Sin Stock (Derivado Externo)
+                    </span>
+                  <% } else if (m.tipo_movimiento === 'ENTRADA_STOCK') { %>
+                    <span class="badge bg-primary py-2 px-3">
+                      <i class="bi bi-box-arrow-in-down me-1"></i> Entrada de Stock
+                    </span>
+                  <% } else { %>
+                    <span class="badge bg-secondary py-2 px-3"><%= m.tipo_movimiento %></span>
+                  <% } %>
+                </td>
+                <td>
+                  <strong class="text-dark"><%= m.med_nombre || m.receta_med_nombre || 'Medicamento' %></strong>
+                  <% if (m.med_codigo) { %>
+                    <small class="text-muted d-block font-monospace"><%= m.med_codigo %></small>
+                  <% } %>
+                </td>
+                <td class="text-center fw-bold fs-6">
+                  <%= m.cantidad %>
+                </td>
+                <td class="text-center">
+                  <span class="text-muted font-monospace"><%= m.stock_anterior !== null ? m.stock_anterior : '-' %></span>
+                  <i class="bi bi-arrow-right mx-1 text-teal"></i>
+                  <span class="fw-bold font-monospace text-dark"><%= m.stock_nuevo !== null ? m.stock_nuevo : '-' %></span>
+                </td>
+                <td>
+                  <div class="fs-7 text-secondary"><%= m.motivo %></div>
+                  <% if (m.codigo_receta) { %>
+                    <small class="badge bg-light text-dark border font-monospace mt-1">Receta: <%= m.codigo_receta %></small>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+            <tr>
+              <td colspan="6" class="text-center py-5 text-muted">
+                <i class="bi bi-clock-history fs-1 d-block mb-2 text-teal-light"></i>
+                <h6 class="fw-bold text-dark">No hay movimientos registrados</h6>
+                <p class="mb-0">Los despachos y entradas de medicamentos se registrarán aquí automáticamente.</p>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
+

@@ -1,0 +1,377 @@
+<%
+  const rolesAutorizadosEcf = ['ADMINISTRADOR', 'SECRETARIA', 'RECEPCION'];
+  const usuarioPuedeEmitirEcf = usuarioActual && rolesAutorizadosEcf.includes(usuarioActual.rol);
+  const esAdmin = usuarioActual && usuarioActual.rol === 'ADMINISTRADOR';
+  const urlRetornoActual = typeof returnToUrl !== 'undefined' ? returnToUrl : `/consultas/${consulta.id}`;
+  const comp = typeof comprobanteActivo !== 'undefined' ? comprobanteActivo : null;
+  const infoEst = typeof estadoInfo !== 'undefined' ? estadoInfo : null;
+  const cfgImecf = typeof configImecf !== 'undefined' ? configImecf : { tieneApiKey: false, modoSimulacion: false, ambienteConfigurado: 'TesteCF', defaultIndicador: '4', allowProduction: false };
+  const indicadorInicial = comp?.indicador_facturacion || consulta.servicio_indicador_facturacion || cfgImecf.defaultIndicador || '4';
+
+  const tieneComprobanteVigente = comp && !['Rechazado', 'ERROR_ENVIO', 'ERROR_VALIDACION', 'ERROR_CONFIGURACION', 'ERROR_AUTENTICACION', 'ANULADO'].includes(comp.estado);
+  const ambienteActual = comp?.ambiente || cfgImecf.ambienteConfigurado || 'TesteCF';
+  const esAmbienteProduccion = ambienteActual === 'eCF';
+  const ppData = typeof datosPayPal !== 'undefined' && datosPayPal ? datosPayPal : null;
+  const pagoComp = ppData ? ppData.pagoCompletado : null;
+  const enPaginaFactura = urlRetornoActual === `/ecf/factura/${consulta.id}`;
+%>
+
+<% if (usuarioPuedeEmitirEcf) { %>
+  <div class="card border-0 shadow-sm mt-4 d-print-none" id="panel-ecf-imecf">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h6 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-receipt-cutoff text-teal me-1"></i>Comprobante Fiscal (e-CF)
+      </h6>
+      <% if (!esAmbienteProduccion) { %>
+        <span class="badge bg-warning text-dark fs-8">Modo prueba</span>
+      <% } %>
+    </div>
+
+    <div class="card-body p-4">
+      <% if (!cfgImecf.tieneApiKey) { %>
+        <div class="alert alert-secondary border fs-8 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <span><i class="bi bi-info-circle me-1"></i>La emisión de comprobantes no está configurada. Contacte al administrador.</span>
+          <% if (esAdmin) { %>
+            <form action="/ecf/verificar-conexion" method="POST" class="d-inline">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="return_to" value="<%= urlRetornoActual %>">
+              <button type="submit" class="btn btn-sm btn-outline-dark"><i class="bi bi-plug me-1"></i> Verificar Conexión</button>
+            </form>
+          <% } %>
+        </div>
+      <% } %>
+
+      <!-- Paso 1 para Secretaría / Caja: Registro de Cobro antes de emitir e-CF -->
+      <div class="p-3 rounded-3 border mb-3 <%= consulta.estado_pago === 'Pagado' ? 'bg-success-subtle border-success-subtle' : 'bg-warning-subtle border-warning' %>">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <span class="fs-8 text-uppercase fw-bold d-block <%= consulta.estado_pago === 'Pagado' ? 'text-success' : 'text-dark' %>">
+              <i class="bi <%= consulta.estado_pago === 'Pagado' ? 'bi-check-circle-fill' : 'bi-cash-coin' %> me-1"></i>
+              Estado de Cobro
+            </span>
+            <strong class="fs-7 text-dark">
+              <%= consulta.estado_pago === 'Pagado' ? 'Cobro Registrado (Pagado)' : 'Pendiente de Cobro en Caja' %>
+            </strong>
+            <span class="text-muted fs-8 ms-1">
+              (Total: <%= formatoMoneda(consulta.valor_total) %> / Copago: <%= formatoMoneda(consulta.diferencia_paciente) %>)
+            </span>
+          </div>
+          <% if (consulta.estado_pago !== 'Pagado') { %>
+            <form action="/ecf/factura/<%= consulta.id %>/registrar-cobro" method="POST" class="d-flex align-items-center gap-1">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="return_to" value="<%= urlRetornoActual %>">
+              <select name="metodo_pago" class="form-select form-select-sm" style="width: auto;" aria-label="Método de cobro">
+                <option value="Efectivo">Efectivo</option>
+                <option value="Tarjeta">Tarjeta</option>
+                <option value="Transferencia">Transferencia</option>
+              </select>
+              <button type="submit" class="btn btn-sm btn-dark fw-semibold text-nowrap" id="btn-registrar-cobro-ecf">
+                <i class="bi bi-check2-circle me-1"></i> Registrar Cobro
+              </button>
+            </form>
+          <% } %>
+        </div>
+      </div>
+
+      <% if (comp && ['Rechazado', 'ERROR_ENVIO', 'ERROR_VALIDACION', 'ERROR_CONFIGURACION', 'ERROR_AUTENTICACION'].includes(comp.estado)) { %>
+        <div class="alert alert-danger border-0 shadow-sm fs-8 mb-3">
+          <div class="fw-bold mb-1">
+            <i class="bi bi-exclamation-octagon-fill me-1"></i>No se pudo emitir el comprobante
+          </div>
+          <div><%= comp.mensaje_error || 'Verifique los datos e intente nuevamente.' %></div>
+        </div>
+      <% } %>
+
+      <% if (tieneComprobanteVigente) { %>
+        <!-- Vista de Comprobante Real Emitido / En Proceso / Incierto en IMECF -->
+        <div class="p-3 rounded-3 bg-light border mb-3">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+              <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Número de Comprobante (e-NCF)</span>
+              <span class="fs-5 fw-bold font-monospace text-dark"><%= comp.encf || 'Pendiente de asignación' %></span>
+              <span class="badge bg-teal ms-1"><%= comp.tipo_ecf %></span>
+            </div>
+            <div class="text-end">
+              <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Estado</span>
+              <span class="badge <%= infoEst ? infoEst.claseBadge : 'bg-secondary' %> fs-7">
+                <i class="bi <%= infoEst ? infoEst.icono : 'bi-info-circle' %> me-1"></i>
+                <%= infoEst ? infoEst.etiqueta : comp.estado %>
+              </span>
+            </div>
+          </div>
+
+          <% if (infoEst && infoEst.enProceso) { %>
+            <div class="alert alert-warning py-2 px-3 fs-8 mb-2">
+              <i class="bi bi-exclamation-circle-fill me-1"></i>
+              <%= infoEst.explicacion %>
+            </div>
+          <% } %>
+
+          <% if (infoEst && infoEst.esIncierto) { %>
+            <div class="alert alert-warning border-warning py-2 px-3 fs-8 mb-2">
+              <i class="bi bi-shield-exclamation me-1"></i>
+              <%= comp.mensaje_error || infoEst.explicacion %>
+            </div>
+          <% } %>
+
+          <div class="row g-2 fs-8 mt-1 pt-2 border-top">
+            <div class="col-6">
+              <span class="text-muted d-block">Comprador:</span>
+              <strong><%= comp.razon_social_comprador || 'Consumidor Final' %></strong>
+              <% if (comp.rnc_comprador) { %>
+                <span class="d-block font-monospace text-muted">RNC/Céd: <%= comp.rnc_comprador %></span>
+              <% } %>
+            </div>
+            <div class="col-6">
+              <span class="text-muted d-block">Fecha Emisión:</span>
+              <strong><%= formatoFechaHora(comp.fecha_emision) %></strong>
+            </div>
+            <div class="col-12 pt-2 border-top mt-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">ITBIS:</span>
+                <strong><%= formatoMoneda(comp.total_itbis) %></strong>
+              </div>
+              <div class="d-flex justify-content-between fs-7 mt-1 pt-1 border-top">
+                <strong class="text-dark">Total:</strong>
+                <strong class="text-teal"><%= formatoMoneda(comp.monto_total) %></strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acciones sobre el comprobante emitido en IMECF -->
+        <div class="d-grid gap-2">
+          <% if (comp.estado === 'INCIERTO_TIMEOUT') { %>
+            <form action="/ecf/documento/<%= comp.id %>/conciliar" method="POST" class="d-grid">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="return_to" value="<%= urlRetornoActual %>">
+              <button type="submit" class="btn btn-warning fw-bold btn-sm">
+                <i class="bi bi-arrow-repeat me-1"></i> Verificar si el comprobante se emitió
+              </button>
+            </form>
+          <% } else { %>
+            <%# Con trackId se consulta a la DGII (GET /api/v1/ecf/{id}/track, actualiza el registro);
+                sin trackId solo se puede leer el estado guardado en IMECF (GET /api/v1/ecf/{id}/status) %>
+            <form action="/ecf/documento/<%= comp.id %>/<%= comp.track_id ? 'consultar-track' : 'consultar-estado' %>" method="POST" class="d-grid">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="return_to" value="<%= urlRetornoActual %>">
+              <button type="submit" class="btn btn-outline-teal btn-sm fw-semibold">
+                <i class="bi bi-arrow-clockwise me-1"></i> Actualizar Estado
+              </button>
+            </form>
+
+            <div class="row g-2">
+              <div class="col-6 d-grid">
+                <a href="/ecf/documento/<%= comp.id %>/impresion" target="_blank" class="btn btn-teal btn-sm fw-semibold">
+                  <i class="bi bi-printer-fill me-1"></i> Imprimir
+                </a>
+              </div>
+              <div class="col-6 d-grid">
+                <a href="/ecf/documento/<%= comp.id %>/xml" class="btn btn-outline-dark btn-sm fw-semibold">
+                  <i class="bi bi-download me-1"></i> Descargar XML
+                </a>
+              </div>
+            </div>
+
+            <% if (comp.dgii_url) { %>
+              <a href="<%= comp.dgii_url %>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-qr-code-scan me-1"></i> Validar en DGII
+              </a>
+            <% } %>
+
+            <!-- Envío separado por correo electrónico al paciente -->
+            <form action="/ecf/documento/<%= comp.id %>/enviar-correo" method="POST" class="border rounded p-2 bg-white mt-1">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="return_to" value="<%= urlRetornoActual %>">
+              <label class="form-label fs-8 fw-bold text-secondary mb-1">
+                <i class="bi bi-envelope-paper me-1"></i>Enviar por correo al paciente:
+              </label>
+              <div class="input-group input-group-sm">
+                <input
+                  type="email"
+                  name="correo_destino"
+                  class="form-control"
+                  value="<%= comp.correo_comprador || consulta.paciente_correo || '' %>"
+                  placeholder="correo@paciente.com"
+                  required
+                >
+                <button type="submit" class="btn btn-outline-teal fw-semibold">
+                  <i class="bi bi-send me-1"></i> Enviar
+                </button>
+              </div>
+            </form>
+          <% } %>
+
+          <% if (!enPaginaFactura) { %>
+            <a href="/ecf/factura/<%= consulta.id %>" class="btn btn-light border btn-sm text-secondary">
+              <i class="bi bi-receipt me-1"></i> Ver Factura Completa
+            </a>
+          <% } %>
+        </div>
+
+      <% } else { %>
+        <div>
+          <form action="/ecf/factura/<%= consulta.id %>/emitir" method="POST" id="form-emitir-ecf" class="border rounded-3 p-3 bg-light">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="return_to" value="<%= urlRetornoActual %>">
+
+            <!-- 1. Tipo de Comprobante (E31 / E32) -->
+            <div class="mb-3">
+              <label for="select-tipo-ecf" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">
+                Tipo de Comprobante *
+              </label>
+              <select name="tipo_ecf" id="select-tipo-ecf" class="form-select form-select-sm" required>
+                <option value="E32" selected>Factura de Consumo (E32)</option>
+                <option value="E31">Factura de Crédito Fiscal (E31)</option>
+              </select>
+              <small id="ayuda-esquema-ecf" class="text-muted fs-8 d-block mt-1">
+                Para pacientes / consumidor final.
+              </small>
+            </div>
+
+            <!-- 2. Criterio del Monto a Facturar -->
+            <div class="mb-3">
+              <label for="select-criterio-monto" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">
+                Importe a Facturar *
+              </label>
+              <select name="criterio_monto" id="select-criterio-monto" class="form-select form-select-sm" required>
+                <option value="TOTAL" data-monto="<%= consulta.valor_total %>">
+                  Valor Total del Servicio (<%= formatoMoneda(consulta.valor_total) %>)
+                </option>
+                <% if (parseFloat(consulta.diferencia_paciente) > 0 && parseFloat(consulta.diferencia_paciente) !== parseFloat(consulta.valor_total)) { %>
+                  <option value="COPAGO" data-monto="<%= consulta.diferencia_paciente %>">
+                    Solo Copago / Diferencia Paciente (<%= formatoMoneda(consulta.diferencia_paciente) %>)
+                  </option>
+                <% } %>
+              </select>
+            </div>
+
+            <!-- 3. Tratamiento Fiscal Configurable (ITBIS) -->
+            <div class="mb-3">
+              <label for="select-indicador-facturacion" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">
+                ITBIS *
+              </label>
+              <select name="indicador_facturacion" id="select-indicador-facturacion" class="form-select form-select-sm" required>
+                <option value="4" <%= indicadorInicial === '4' ? 'selected' : '' %>>
+                  Exento (servicios médicos)
+                </option>
+                <option value="1" <%= indicadorInicial === '1' ? 'selected' : '' %>>
+                  18%
+                </option>
+                <option value="2" <%= indicadorInicial === '2' ? 'selected' : '' %>>
+                  16%
+                </option>
+                <option value="3" <%= indicadorInicial === '3' ? 'selected' : '' %>>
+                  0%
+                </option>
+              </select>
+            </div>
+
+            <!-- 4. Datos Fiscales del Comprador -->
+            <div class="mb-3">
+              <label for="input-rnc-comprador" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">
+                RNC o Cédula del Comprador <span id="asterisco-rnc" class="text-danger d-none">*</span>
+              </label>
+              <input
+                type="text"
+                name="rnc_comprador"
+                id="input-rnc-comprador"
+                class="form-control form-control-sm font-monospace"
+                value="<%= (consulta.paciente_identificacion || '').replace(/\D/g, '') %>"
+                placeholder="Ej. 101010101 o 00112345678"
+                maxlength="15"
+              >
+            </div>
+
+            <div class="mb-3">
+              <label for="input-razon-comprador" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">
+                Nombre o Razón Social <span id="asterisco-razon" class="text-danger d-none">*</span>
+              </label>
+              <input
+                type="text"
+                name="razon_social_comprador"
+                id="input-razon-comprador"
+                class="form-control form-control-sm"
+                value="<%= consulta.paciente_nombre %> <%= consulta.paciente_apellido %>"
+                maxlength="150"
+                required
+              >
+            </div>
+
+            <!-- 5. Condición y Forma de Pago -->
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label for="select-tipo-pago" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">Tipo Pago</label>
+                <select name="tipo_pago" id="select-tipo-pago" class="form-select form-select-sm">
+                  <option value="1" selected>Contado</option>
+                  <option value="2">Crédito</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label for="select-forma-pago" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">Medio Pago</label>
+                <select name="forma_pago" id="select-forma-pago" class="form-select form-select-sm">
+                  <option value="1" <%= !pagoComp ? 'selected' : '' %>>Efectivo</option>
+                  <option value="2">Transferencia / Depósito</option>
+                  <option value="3" <%= pagoComp ? 'selected' : '' %>>Tarjeta / PayPal</option>
+                  <option value="4">Venta a Crédito</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Botón de Envío Real a IMECF -->
+            <div class="d-grid gap-2">
+              <button
+                type="submit"
+                class="btn btn-teal fw-bold"
+                id="btn-submit-emitir-ecf"
+                <%= !cfgImecf.tieneApiKey ? 'disabled title="La integración de comprobantes está pendiente de configuración. Contacte al administrador."' : '' %>
+              >
+                <i class="bi bi-cloud-upload-fill me-1"></i> Emitir e-CF
+              </button>
+            </div>
+
+          </form>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const formEcf = document.getElementById('form-emitir-ecf');
+      if (!formEcf) return;
+
+      const selectTipo = document.getElementById('select-tipo-ecf');
+      const ayudaEsquema = document.getElementById('ayuda-esquema-ecf');
+      const asteriscoRnc = document.getElementById('asterisco-rnc');
+      const asteriscoRazon = document.getElementById('asterisco-razon');
+      const inputRnc = document.getElementById('input-rnc-comprador');
+      const btnSubmit = document.getElementById('btn-submit-emitir-ecf');
+
+      function actualizarReglasTipo() {
+        const tipo = selectTipo.value;
+        if (tipo === 'E31') {
+          ayudaEsquema.textContent = 'Para empresas: RNC o Cédula y Razón Social obligatorios.';
+          asteriscoRnc.classList.remove('d-none');
+          asteriscoRazon.classList.remove('d-none');
+          inputRnc.setAttribute('required', 'required');
+        } else {
+          ayudaEsquema.textContent = 'Para pacientes / consumidor final.';
+          asteriscoRnc.classList.add('d-none');
+          asteriscoRazon.classList.add('d-none');
+          inputRnc.removeAttribute('required');
+        }
+      }
+
+      selectTipo.addEventListener('change', actualizarReglasTipo);
+      actualizarReglasTipo();
+
+      formEcf.addEventListener('submit', function() {
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Emitiendo...';
+        }
+      });
+    })();
+  </script>
+<% } %>

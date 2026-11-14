@@ -1,0 +1,343 @@
+<%- include('../partials/header') %>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-box-seam text-teal me-2"></i>Despacho de Receta: <span class="font-monospace text-teal"><%= receta.codigo_receta %></span>
+    </h1>
+    <p class="text-muted mb-0">
+      Verifique existencias disponibles en inventario interno y registre cada medicamento como entregado o no entregado.
+    </p>
+  </div>
+  <a href="/farmacia/dispensar" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i> Volver a la cola de recetas
+  </a>
+</div>
+
+<!-- Tarjeta de Información del Paciente, Seguro y Diagnóstico -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Paciente</span>
+        <div class="fs-5 fw-bold text-dark"><%= receta.paciente_nombre %> <%= receta.paciente_apellido %></div>
+        <div class="text-muted fs-8 font-monospace">Cédula: <%= receta.paciente_identificacion || 'Sin documento' %></div>
+        <% if (receta.paciente_telefono) { %>
+          <small class="text-secondary d-block"><i class="bi bi-telephone me-1"></i><%= receta.paciente_telefono %></small>
+        <% } %>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Seguro Médico / ARS</span>
+        <% if (receta.ars_nombre) { %>
+          <div class="d-flex align-items-center gap-2 my-1">
+            <span class="badge bg-teal-subtle text-teal border border-teal-subtle fs-7">
+              <i class="bi bi-shield-check me-1"></i><%= receta.ars_nombre %>
+            </span>
+          </div>
+          <% if (receta.numero_afiliado) { %>
+            <small class="text-muted font-monospace d-block">No. Afiliado: <%= receta.numero_afiliado %></small>
+          <% } %>
+          <small class="text-success fs-8"><i class="bi bi-check-circle me-1"></i>Cobertura disponible para medicamentos en convenio</small>
+        <% } else { %>
+          <span class="badge bg-secondary-subtle text-secondary fs-7 my-1">
+            <i class="bi bi-person-x me-1"></i>Particular / Sin Seguro
+          </span>
+          <small class="text-muted d-block fs-8">Medicamentos no cubiertos: el paciente asume el costo o los compra por su cuenta.</small>
+        <% } %>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Diagnóstico Clínico</span>
+        <div class="fs-7 fw-semibold text-teal mb-1"><%= receta.diagnostico_clinico %></div>
+        <small class="text-muted d-block">Emisión: <%= new Date(receta.fecha_emision).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }) %></small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Resumen del Estado de la Receta (Punto 7) -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <span class="fw-bold fs-7 text-dark">Resumen del Despacho:</span>
+        <span class="badge bg-light text-dark border">Total: <%= resumen.totalItems %> medicamento(s)</span>
+        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i><%= resumen.entregados %> Entregado(s)</span>
+        <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i><%= resumen.noEntregados %> No entregado(s)</span>
+        <% if (resumen.pendientes > 0) { %>
+          <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i><%= resumen.pendientes %> Pendiente(s)</span>
+        <% } %>
+      </div>
+      <div>
+        <% if (resumen.completada) { %>
+          <span class="badge bg-success-subtle text-success border border-success px-3 py-2 fw-semibold">
+            <i class="bi bi-check2-all me-1"></i>Receta Procesada en su Totalidad
+          </span>
+        <% } else { %>
+          <span class="badge bg-warning-subtle text-warning-emphasis border border-warning px-3 py-2 fw-semibold">
+            <i class="bi bi-clock-history me-1"></i>Fármacos Pendientes por Procesar
+          </span>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Listado de Medicamentos Prescritos para Despacho -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h5 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-capsule text-teal me-2"></i>Medicamentos Prescritos y Control de Entrega
+      </h5>
+      <small class="text-muted">
+        Revise el stock disponible en inventario interno. El inventario solo se descuenta por las unidades efectivamente entregadas.
+      </small>
+    </div>
+    <a href="/farmacia/inventario" class="btn btn-sm btn-outline-teal" target="_blank">
+      <i class="bi bi-boxes me-1"></i> Consultar Inventario
+    </a>
+  </div>
+
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light fs-8 text-uppercase">
+          <tr>
+            <th style="width: 25%;">Medicamento Prescrito</th>
+            <th style="width: 18%;">Indicaciones</th>
+            <th style="width: 8%;" class="text-center">Cant.</th>
+            <th style="width: 15%;" class="text-center">Inventario Interno</th>
+            <th style="width: 15%;">Cobertura de Seguro</th>
+            <th style="width: 19%;">Estado &amp; Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (items && items.length > 0) { %>
+            <% items.forEach(function(item) { %>
+              <% 
+                const tieneSuficiente = item.stock_actual !== null && item.stock_actual !== undefined && item.stock_actual >= item.cantidad_recetada;
+                const esEntregado = item.estado_dispensacion === 'Entregado';
+                const esNoEntregado = item.estado_dispensacion === 'No entregado' || item.estado_dispensacion === 'No entregado - Sin existencias';
+                const esPendiente = item.estado_dispensacion === 'Pendiente';
+                const tieneArs = Boolean(receta.ars_nombre && receta.ars_nombre.toLowerCase() !== 'particular');
+                const estaCubierto = tieneArs && item.cubierto_ars !== false;
+              %>
+              <tr class="<%= esEntregado ? 'table-success-subtle' : (esNoEntregado ? 'table-danger-subtle' : '') %>">
+                <!-- 1. Medicamento Prescrito -->
+                <td>
+                  <strong class="text-dark d-block fs-7"><%= item.nombre_medicamento %></strong>
+                  <div class="fs-8 text-muted">
+                    Dosis: <%= item.dosis %> &bull; Frecuencia: <%= item.frecuencia %>
+                  </div>
+                  <% if (item.med_ubicacion) { %>
+                    <small class="text-secondary fs-8"><i class="bi bi-geo-alt me-1"></i>Ubicación: <%= item.med_ubicacion %></small>
+                  <% } %>
+                </td>
+
+                <!-- 2. Indicaciones -->
+                <td>
+                  <span class="fs-8 text-secondary"><%= item.indicaciones_uso %></span>
+                </td>
+
+                <!-- 3. Cantidad Recetada -->
+                <td class="text-center fw-bold fs-6">
+                  <%= item.cantidad_recetada %>
+                  <small class="text-muted d-block fs-8">unid.</small>
+                </td>
+
+                <!-- 4. Inventario Interno y Suficiencia (Punto 3) -->
+                <td class="text-center">
+                  <% if (item.stock_actual !== null && item.stock_actual !== undefined) { %>
+                    <% if (tieneSuficiente) { %>
+                      <span class="badge bg-success-subtle text-success border border-success fs-8">
+                        <i class="bi bi-check-circle-fill me-1"></i>Suficiente (<%= item.stock_actual %> disp.)
+                      </span>
+                    <% } else if (item.stock_actual > 0) { %>
+                      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning fs-8">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Insuficiente (<%= item.stock_actual %> disp.)
+                      </span>
+                    <% } else { %>
+                      <span class="badge bg-danger-subtle text-danger border border-danger fs-8">
+                        <i class="bi bi-x-circle-fill me-1"></i>Sin existencia (0)
+                      </span>
+                    <% } %>
+                  <% } else { %>
+                    <span class="badge bg-secondary fs-8">No en inventario</span>
+                  <% } %>
+                </td>
+
+                <!-- 5. Cobertura de Seguro del Paciente (Punto 6) -->
+                <td>
+                  <% if (estaCubierto) { %>
+                    <span class="badge bg-teal-subtle text-teal border border-teal-subtle fs-8">
+                      <i class="bi bi-shield-check me-1"></i>Cubierto por <%= receta.ars_nombre %>
+                    </span>
+                    <% if (esEntregado) { %>
+                      <small class="text-success fw-semibold d-block fs-8 mt-1">
+                        <i class="bi bi-check2 me-1"></i>Cobertura utilizada
+                      </small>
+                    <% } %>
+                  <% } else { %>
+                    <span class="badge bg-secondary-subtle text-secondary border fs-8">
+                      <i class="bi bi-x-circle me-1"></i>No cubierto por seguro
+                    </span>
+                    <small class="text-danger fw-semibold d-block fs-8 mt-1">
+                      <i class="bi bi-info-circle me-1"></i>Paciente debe comprarlo por su cuenta
+                    </small>
+                  <% } %>
+                </td>
+
+                <!-- 6. Estado & Acción de Entrega (Puntos 4, 5 y 7) -->
+                <td>
+                  <% if (esEntregado) { %>
+                    <!-- Ya entregado -->
+                    <span class="badge bg-success py-2 px-3 shadow-sm">
+                      <i class="bi bi-check2-circle me-1"></i>Entregado
+                    </span>
+                    <% if (item.observacion_farmacia) { %>
+                      <small class="d-block text-muted fs-8 mt-1">
+                        <%= item.observacion_farmacia %>
+                      </small>
+                    <% } %>
+                  <% } else if (esNoEntregado) { %>
+                    <!-- No entregado con comentario -->
+                    <span class="badge bg-danger py-2 px-3 shadow-sm">
+                      <i class="bi bi-x-circle me-1"></i>No entregado
+                    </span>
+                    <div class="alert alert-danger p-2 mt-1 mb-0 fs-8 text-start">
+                      <strong>Motivo:</strong> "<%= item.motivo_no_entrega || item.observacion_farmacia %>"
+                      <div class="text-muted mt-1">El paciente debe conseguirlo en una farmacia externa.</div>
+                    </div>
+                  <% } else { %>
+                    <!-- Pendiente: Botones para Entregar o No Entregar -->
+                    <div class="d-flex flex-column gap-1">
+                      <% if (tieneSuficiente) { %>
+                        <form action="/farmacia/dispensar/<%= item.id %>/entregar" method="POST" class="d-inline form-dispensar">
+                          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                          <button type="submit" class="btn btn-sm btn-success fw-bold w-100 shadow-sm">
+                            <i class="bi bi-check-lg me-1"></i> Entregar (<%= item.cantidad_recetada %> unid.)
+                          </button>
+                        </form>
+                      <% } else { %>
+                        <button type="button" class="btn btn-sm btn-light border text-muted w-100" disabled title="No se puede entregar: inventario insuficiente">
+                          <i class="bi bi-slash-circle me-1"></i> Stock Insuficiente
+                        </button>
+                      <% } %>
+
+                      <!-- Botón para Registrar No Entregado con Comentario -->
+                      <button type="button"
+                              class="btn btn-sm btn-outline-danger w-100"
+                              data-id="<%= item.id %>"
+                              data-nombre="<%= item.nombre_medicamento %>"
+                              data-insuficiente="<%= !tieneSuficiente %>"
+                              onclick="abrirModalNoEntregar(this.dataset.id, this.dataset.nombre, this.dataset.insuficiente)">
+                        <i class="bi bi-x-circle me-1"></i> No Entregar...
+                      </button>
+                    </div>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Registrar Medicamento No Entregado (Punto 4) -->
+<div class="modal fade" id="modalNoEntregar" tabindex="-1" aria-labelledby="modalNoEntregarLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form id="formNoEntregar" method="POST" class="form-dispensar">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title fw-bold" id="modalNoEntregarLabel">
+            <i class="bi bi-x-octagon-fill me-2"></i>Registrar Medicamento No Entregado
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="alert alert-light border shadow-sm fs-8 mb-3">
+            <i class="bi bi-info-circle-fill text-danger me-1"></i>
+            <strong>Regla de inventario:</strong> Al marcar este medicamento como no entregado, <strong>no se descontará ninguna unidad del inventario</strong>. Debe indicar el motivo para que quede registrado en la receta del paciente.
+          </div>
+
+          <div class="mb-3">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Medicamento:</span>
+            <div class="fw-bold fs-6 text-dark" id="modalNoEntregarNombre"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fs-7 fw-bold">Seleccione o escriba el motivo <span class="text-danger">*</span></label>
+            <div class="d-flex flex-column gap-2 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary text-start btn-motivo-rapido" onclick="seleccionarMotivo('Sin existencia en farmacia interna')">
+                <i class="bi bi-box-arrow-down me-2 text-danger"></i>Sin existencia en farmacia interna
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary text-start btn-motivo-rapido" onclick="seleccionarMotivo('Paciente lo comprará fuera')">
+                <i class="bi bi-bag-plus me-2 text-primary"></i>Paciente lo comprará fuera
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary text-start btn-motivo-rapido" onclick="seleccionarMotivo('No cubierto por seguro; paciente prefiere farmacia externa')">
+                <i class="bi bi-shield-slash me-2 text-warning"></i>No cubierto por seguro; paciente prefiere farmacia externa
+              </button>
+            </div>
+
+            <input type="text"
+                   name="motivo"
+                   id="modalMotivoInput"
+                   class="form-control"
+                   placeholder="Escriba el motivo (Ej: Sin existencia, Paciente lo comprará fuera...)"
+                   required>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger fw-bold px-4">
+            <i class="bi bi-check2 me-1"></i> Confirmar como No Entregado
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirModalNoEntregar(id, nombre, insuficiente) {
+  document.getElementById('formNoEntregar').action = `/farmacia/dispensar/${id}/no-entregar`;
+  document.getElementById('modalNoEntregarNombre').innerText = nombre;
+
+  const inputMotivo = document.getElementById('modalMotivoInput');
+  if (insuficiente === 'true') {
+    inputMotivo.value = 'Sin existencia en farmacia interna';
+  } else {
+    inputMotivo.value = 'Paciente lo comprará fuera';
+  }
+
+  const modal = new bootstrap.Modal(document.getElementById('modalNoEntregar'));
+  modal.show();
+}
+
+function seleccionarMotivo(texto) {
+  const input = document.getElementById('modalMotivoInput');
+  input.value = texto;
+  input.focus();
+}
+
+document.querySelectorAll('.form-dispensar').forEach(function(form) {
+  form.addEventListener('submit', function(e) {
+    if (form.dataset.submitting === 'true') {
+      e.preventDefault();
+      return;
+    }
+    form.dataset.submitting = 'true';
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = true;
+    }
+  });
+});
+</script>
+
+<%- include('../partials/footer') %>

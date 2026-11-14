@@ -1,0 +1,21 @@
+# Nunca incluir credenciales en la imagen: en Cloud Run se inyectan desde Secret Manager
+.env
+.env.*
+
+node_modules
+npm-debug.log*
+.git
+.github
+.vscode
+.idea
+.DS_Store
+scripts
+README.md
+DEPLOY.md
+Dockerfile
+.dockerignore
+cloudbuild.yaml
+*.p12
+*.pfx
+*.pem
+*.key

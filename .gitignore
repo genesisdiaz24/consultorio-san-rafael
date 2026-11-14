@@ -1,0 +1,23 @@
+# Variables de entorno y credenciales privadas (NUNCA subir al repositorio)
+.env
+.env.*
+!.env.example
+
+# Dependencias de Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Certificados digitales y llaves privadas (.p12, .pfx, .pem, .key)
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Archivos del sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

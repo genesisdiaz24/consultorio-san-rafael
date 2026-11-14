@@ -1,0 +1,40 @@
+<% if (mensajes.success && mensajes.success.length > 0) { %>
+  <% mensajes.success.forEach(function(msg) { %>
+    <div class="alert alert-success alert-dismissible fade show shadow-sm border-start border-success border-4 d-flex align-items-center" role="alert">
+      <i class="bi bi-check-circle-fill fs-5 me-2 text-success"></i>
+      <div><%= msg %></div>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+  <% }); %>
+<% } %>
+
+<% if (mensajes.error && mensajes.error.length > 0) { %>
+  <% mensajes.error.forEach(function(msg) { %>
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm border-start border-danger border-4 d-flex align-items-center" role="alert">
+      <i class="bi bi-exclamation-octagon-fill fs-5 me-2 text-danger"></i>
+      <div><%= msg %></div>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+  <% }); %>
+<% } %>
+
+<% if (mensajes.warning && mensajes.warning.length > 0) { %>
+  <% mensajes.warning.forEach(function(msg) { %>
+    <div class="alert alert-warning alert-dismissible fade show shadow-sm border-start border-warning border-4 d-flex align-items-center" role="alert">
+      <i class="bi bi-exclamation-triangle-fill fs-5 me-2 text-warning"></i>
+      <div><%= msg %></div>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+  <% }); %>
+<% } %>
+
+<% if (mensajes.info && mensajes.info.length > 0) { %>
+  <% mensajes.info.forEach(function(msg) { %>
+    <div class="alert alert-info alert-dismissible fade show shadow-sm border-start border-info border-4 d-flex align-items-center" role="alert">
+      <i class="bi bi-info-circle-fill fs-5 me-2 text-info"></i>
+      <div><%= msg %></div>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+  <% }); %>
+<% } %>
+

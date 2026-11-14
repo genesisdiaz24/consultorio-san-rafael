@@ -1,0 +1,483 @@
+<%- include('../partials/header') %>
+<%
+  const rolSesion = usuarioActual ? usuarioActual.rol : '';
+  const puedeGestionarAgenda = ['ADMINISTRADOR', 'SECRETARIA', 'RECEPCION'].includes(rolSesion);
+  const puedeVerFarmacia = ['ADMINISTRADOR', 'FARMACIA'].includes(rolSesion);
+%>
+
+<!-- Encabezado de la Ficha Clínica -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+      <div class="d-flex align-items-start gap-3">
+        <div class="rounded-circle bg-teal-subtle text-teal p-3 d-flex align-items-center justify-content-center" style="width: 68px; height: 68px;">
+          <i class="bi bi-person-fill fs-1"></i>
+        </div>
+        <div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <h2 class="h3 fw-bold text-dark mb-0"><%= paciente.nombre %> <%= paciente.apellido %></h2>
+            <span class="badge bg-light text-dark border font-monospace">
+              <%= paciente.tipo_documento %>: <%= paciente.identificacion %>
+            </span>
+            <% if (paciente.ars_nombre) { %>
+              <span class="badge bg-teal-subtle text-teal fw-semibold">
+                <i class="bi bi-shield-check me-1"></i><%= paciente.ars_nombre %> (Afiliado: <%= paciente.numero_afiliado || 'N/A' %>)
+              </span>
+            <% } else { %>
+              <span class="badge bg-secondary-subtle text-secondary">Particular / Sin ARS</span>
+            <% } %>
+          </div>
+          <div class="text-muted fs-7 d-flex flex-wrap gap-3">
+            <span><i class="bi bi-gender-ambiguous me-1"></i><strong>Género:</strong> <%= paciente.genero %></span>
+            <span><i class="bi bi-cake2 me-1"></i><strong>Nacimiento:</strong> <%= formatoFecha(paciente.fecha_nacimiento) %></span>
+            <span><i class="bi bi-telephone me-1"></i><strong>Teléfono:</strong> <%= paciente.telefono %></span>
+            <% if (paciente.correo) { %>
+              <span><i class="bi bi-envelope me-1"></i><strong>Correo:</strong> <%= paciente.correo %></span>
+            <% } %>
+          </div>
+          <% if (paciente.direccion) { %>
+            <div class="text-muted fs-8 mt-1">
+              <i class="bi bi-geo-alt me-1"></i><%= paciente.direccion %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2 align-self-stretch align-self-lg-auto justify-content-end">
+        <% if (typeof esClinico !== 'undefined' ? esClinico : (usuarioActual && ['MEDICO', 'ADMINISTRADOR'].includes(usuarioActual.rol))) { %>
+          <a href="/consultas/atender?paciente_id=<%= paciente.id %>" class="btn btn-success fw-bold shadow-sm">
+            <i class="bi bi-stethoscope me-1"></i> Iniciar Consulta Médica
+          </a>
+        <% } %>
+        <% if (puedeGestionarAgenda) { %>
+          <a href="/citas/nueva?paciente_id=<%= paciente.id %>" class="btn btn-outline-teal fw-semibold">
+            <i class="bi bi-calendar-plus me-1"></i> Agendar Cita
+          </a>
+          <a href="/pacientes/<%= paciente.id %>/editar" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i> Editar
+          </a>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% if (typeof esClinico !== 'undefined' ? esClinico : (usuarioActual && ['MEDICO', 'ADMINISTRADOR'].includes(usuarioActual.rol))) { %>
+<!-- Tarjetas de Antecedentes Médicos (Exclusivo Médico y Administrador) -->
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-4">
+    <div class="card border-0 shadow-sm border-start border-4 border-danger h-100">
+      <div class="card-body p-3">
+        <h6 class="fw-bold text-danger mb-2">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>Alergias Conocidas
+        </h6>
+        <p class="mb-0 fs-7 <%= paciente.antecedentes_alergicos ? 'text-dark fw-semibold' : 'text-muted fst-italic' %>">
+          <%= paciente.antecedentes_alergicos || 'Sin antecedentes alérgicos reportados' %>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card border-0 shadow-sm border-start border-4 border-teal h-100">
+      <div class="card-body p-3">
+        <h6 class="fw-bold text-teal mb-2">
+          <i class="bi bi-heart-pulse me-1"></i>Antecedentes Personales
+        </h6>
+        <p class="mb-0 fs-7 <%= paciente.antecedentes_personales ? 'text-dark' : 'text-muted fst-italic' %>">
+          <%= paciente.antecedentes_personales || 'Sin antecedentes patológicos relevantes' %>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card border-0 shadow-sm border-start border-4 border-secondary h-100">
+      <div class="card-body p-3">
+        <h6 class="fw-bold text-secondary mb-2">
+          <i class="bi bi-people me-1"></i>Antecedentes Familiares
+        </h6>
+        <p class="mb-0 fs-7 <%= paciente.antecedentes_familiares ? 'text-dark' : 'text-muted fst-italic' %>">
+          <%= paciente.antecedentes_familiares || 'Sin antecedentes familiares reportados' %>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<% if (typeof esClinico !== 'undefined' && !esClinico) { %>
+<!-- Vista Exclusiva para Secretaría: Proceso de Cobro del Paciente y Agenda de Citas -->
+
+<!-- 1. Cobro de Consultas y Copagos del Paciente -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+    <h5 class="fw-bold mb-0 text-dark">
+      <i class="bi bi-cash-coin text-teal me-2"></i>Consultas y Cobros de Copago (<%= consultas ? consultas.length : 0 %>)
+    </h5>
+    <span class="badge bg-light text-secondary border fs-8">
+      <i class="bi bi-shield-lock me-1"></i>Datos de Facturación
+    </span>
+  </div>
+  <div class="card-body p-0">
+    <% if (consultas && consultas.length > 0) { %>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light fs-8 text-uppercase">
+            <tr>
+              <th>Fecha</th>
+              <th>Servicio Facturado</th>
+              <th>ARS / Cobertura</th>
+              <th>Total Servicio</th>
+              <th>Copago a Cobrar</th>
+              <th>Estado Pago</th>
+              <th class="text-end">Acción de Cobro</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% consultas.forEach(function(con) { %>
+              <tr>
+                <td>
+                  <span class="fw-bold text-dark"><%= formatoFecha(con.fecha_consulta) %></span>
+                  <small class="text-muted d-block font-monospace">#<%= con.id %></small>
+                </td>
+                <td>
+                  <strong class="text-dark"><%= con.servicio_nombre || 'Consulta Médica General' %></strong>
+                </td>
+                <td>
+                  <% if (con.ars_nombre) { %>
+                    <span class="badge bg-teal-subtle text-teal border border-teal-subtle"><%= con.ars_nombre %></span>
+                    <small class="text-muted d-block">- <%= formatoMoneda(con.valor_cubierto_ars) %></small>
+                  <% } else { %>
+                    <span class="badge bg-secondary-subtle text-secondary">Particular</span>
+                  <% } %>
+                </td>
+                <td class="fw-semibold text-dark">
+                  <%= formatoMoneda(con.valor_total) %>
+                </td>
+                <td>
+                  <span class="fs-6 fw-bold text-danger">
+                    <%= formatoMoneda(con.diferencia_paciente) %>
+                  </span>
+                </td>
+                <td>
+                  <% if (con.estado_pago === 'Pagado') { %>
+                    <span class="badge bg-success">
+                      <i class="bi bi-check-circle-fill me-1"></i>Pagado
+                    </span>
+                  <% } else { %>
+                    <span class="badge bg-warning text-dark">
+                      <i class="bi bi-clock-history me-1"></i>Pendiente
+                    </span>
+                  <% } %>
+                </td>
+                <td class="text-end">
+                  <% if (con.estado_pago === 'Pagado') { %>
+                    <div class="d-inline-flex gap-1">
+                      <a href="/pagos/paypal/comprobante/<%= con.id %>" target="_blank" class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-receipt me-1"></i> Recibo
+                      </a>
+                      <a href="/ecf/factura/<%= con.id %>" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-receipt-cutoff me-1"></i> Factura
+                      </a>
+                    </div>
+                  <% } else { %>
+                    <a href="/ecf/factura/<%= con.id %>" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                      <i class="bi bi-paypal me-1"></i> Pagar copago con PayPal
+                    </a>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-receipt fs-2 d-block mb-1 text-teal-light"></i>
+        Este paciente no tiene consultas registradas para cobro.
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<!-- 2. Agenda y Citas del Paciente -->
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+    <h5 class="fw-bold mb-0 text-dark">
+      <i class="bi bi-calendar2-week text-teal me-2"></i>Agenda y Citas del Paciente (<%= citas.length %>)
+    </h5>
+    <% if (puedeGestionarAgenda) { %>
+      <a href="/citas/nueva?paciente_id=<%= paciente.id %>" class="btn btn-teal btn-sm fw-semibold">
+        <i class="bi bi-calendar-plus me-1"></i> Agendar Nueva Cita
+      </a>
+    <% } %>
+  </div>
+  <div class="card-body p-0">
+    <% if (citas && citas.length > 0) { %>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light fs-8 text-uppercase">
+            <tr>
+              <th>Fecha y Hora</th>
+              <th>Canal de Solicitud</th>
+              <th>Motivo</th>
+              <th>Estado</th>
+              <th class="text-end">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% citas.forEach(function(ci) { %>
+              <tr>
+                <td>
+                  <span class="fw-bold"><%= formatoFecha(ci.fecha) %></span>
+                  <small class="text-muted d-block"><%= ci.hora.substring(0, 5) %></small>
+                </td>
+                <td>
+                  <span class="badge bg-light text-dark border">
+                    <%= ci.canal_solicitud %>
+                  </span>
+                </td>
+                <td><%= ci.motivo %></td>
+                <td>
+                  <% if (ci.estado === 'En sala de espera') { %>
+                    <span class="badge bg-warning text-dark"><i class="bi bi-bell-fill me-1"></i>En sala</span>
+                  <% } else if (ci.estado === 'Atendida') { %>
+                    <span class="badge bg-success">Atendida</span>
+                  <% } else if (ci.estado === 'Cancelada') { %>
+                    <span class="badge bg-danger">Cancelada</span>
+                  <% } else { %>
+                    <span class="badge bg-primary">Programada</span>
+                  <% } %>
+                </td>
+                <td class="text-end">
+                  <% if (ci.estado === 'Programada') { %>
+                    <form action="/citas/<%= ci.id %>/confirmar-llegada" method="POST" class="d-inline">
+                      <button type="submit" class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-check-lg me-1"></i> Confirmar Llegada
+                      </button>
+                    </form>
+                  <% } else if (ci.estado === 'En sala de espera') { %>
+                    <span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>Avisado al Médico</span>
+                  <% } else { %>
+                    <span class="text-muted fs-8">-</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-calendar-x fs-1 d-block mb-2 text-teal-light"></i>
+        <h6 class="fw-bold text-dark">No hay citas agendadas para este paciente</h6>
+        <p class="mb-3">Agende una nueva cita para registrar la visita.</p>
+        <% if (puedeGestionarAgenda) { %>
+          <a href="/citas/nueva?paciente_id=<%= paciente.id %>" class="btn btn-teal btn-sm fw-semibold">
+            <i class="bi bi-calendar-plus me-1"></i> Agendar Cita
+          </a>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+</div>
+<% } else { %>
+<!-- Pestañas de Historial Clínico Completo (Exclusivo Médico y Administrador) -->
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-0 pt-3 px-3">
+    <ul class="nav nav-tabs card-header-tabs" id="fichaTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active fw-semibold text-teal" id="consultas-tab" data-bs-toggle="tab" data-bs-target="#consultas-pane" type="button" role="tab">
+          <i class="bi bi-clipboard2-pulse me-1"></i> Historial de Consultas (<%= consultas.length %>)
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-semibold text-teal" id="citas-tab" data-bs-toggle="tab" data-bs-target="#citas-pane" type="button" role="tab">
+          <i class="bi bi-calendar2-week me-1"></i> Citas del Paciente (<%= citas.length %>)
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-semibold text-teal" id="recetas-tab" data-bs-toggle="tab" data-bs-target="#recetas-pane" type="button" role="tab">
+          <i class="bi bi-capsule me-1"></i> Recetas Médicas (<%= recetas.length %>)
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card-body p-3 p-lg-4">
+    <div class="tab-content" id="fichaTabContent">
+
+      <!-- Panel 1: Consultas Médicas -->
+      <div class="tab-pane fade show active" id="consultas-pane" role="tabpanel">
+        <% if (consultas && consultas.length > 0) { %>
+          <div class="timeline">
+            <% consultas.forEach(function(con) { %>
+              <div class="card border mb-3">
+                <div class="card-body p-3">
+                  <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 mb-2 pb-2 border-bottom">
+                    <div>
+                      <span class="badge bg-teal me-2"><%= formatoFecha(con.fecha_consulta) %></span>
+                      <strong class="text-dark"><%= con.servicio_nombre || 'Consulta Médica General' %></strong>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge bg-light text-dark border">
+                        Total: <%= formatoMoneda(con.valor_total) %> &bull; Copago: <%= formatoMoneda(con.diferencia_paciente) %>
+                      </span>
+                      <span class="badge <%= con.estado_pago === 'Pagado' ? 'bg-success' : 'bg-warning text-dark' %>">
+                        <%= con.estado_pago %>
+                      </span>
+                      <a href="/consultas/<%= con.id %>" class="btn btn-sm btn-outline-teal">
+                        <i class="bi bi-eye me-1"></i> Ver Atención
+                      </a>
+                    </div>
+                  </div>
+
+                  <div class="row g-2 fs-7">
+                    <div class="col-12 col-md-6">
+                      <div class="text-secondary fw-semibold">Motivo de Consulta:</div>
+                      <div><%= con.motivo_consulta %></div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <div class="text-secondary fw-semibold">Diagnóstico Clínico:</div>
+                      <div class="fw-bold text-dark"><%= con.diagnostico_clinico %></div>
+                    </div>
+                    <div class="col-12 mt-2">
+                      <div class="text-secondary fw-semibold">Tratamiento e Indicaciones:</div>
+                      <div class="text-muted"><%= con.tratamiento_plan %></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        <% } else { %>
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-journal-medical fs-1 d-block mb-2 text-teal-light"></i>
+            <h6 class="fw-bold text-dark">No hay consultas registradas para este paciente</h6>
+            <p class="mb-3">Registre la primera atención clínica para crear su historial médico.</p>
+            <a href="/consultas/atender?paciente_id=<%= paciente.id %>" class="btn btn-teal btn-sm fw-semibold">
+              <i class="bi bi-stethoscope me-1"></i> Iniciar Primera Consulta
+            </a>
+          </div>
+        <% } %>
+      </div>
+
+      <!-- Panel 2: Citas Agendadas -->
+      <div class="tab-pane fade" id="citas-pane" role="tabpanel">
+        <% if (citas && citas.length > 0) { %>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light fs-8 text-uppercase">
+                <tr>
+                  <th>Fecha y Hora</th>
+                  <th>Canal de Solicitud</th>
+                  <th>Motivo</th>
+                  <th>Estado</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% citas.forEach(function(ci) { %>
+                  <tr>
+                    <td>
+                      <span class="fw-bold"><%= formatoFecha(ci.fecha) %></span>
+                      <small class="text-muted d-block"><%= ci.hora.substring(0, 5) %></small>
+                    </td>
+                    <td>
+                      <span class="badge bg-light text-dark border">
+                        <%= ci.canal_solicitud %>
+                      </span>
+                    </td>
+                    <td><%= ci.motivo %></td>
+                    <td>
+                      <% if (ci.estado === 'En sala de espera') { %>
+                        <span class="badge bg-warning text-dark"><i class="bi bi-bell-fill me-1"></i>En sala</span>
+                      <% } else if (ci.estado === 'Atendida') { %>
+                        <span class="badge bg-success">Atendida</span>
+                      <% } else if (ci.estado === 'Cancelada') { %>
+                        <span class="badge bg-danger">Cancelada</span>
+                      <% } else { %>
+                        <span class="badge bg-primary">Programada</span>
+                      <% } %>
+                    </td>
+                    <td class="text-end">
+                      <% if (ci.estado === 'Programada') { %>
+                        <form action="/citas/<%= ci.id %>/confirmar-llegada" method="POST" class="d-inline">
+                          <button type="submit" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-check-lg me-1"></i> Confirmar Llegada
+                          </button>
+                        </form>
+                      <% } else if (ci.estado === 'En sala de espera') { %>
+                        <a href="/consultas/atender?paciente_id=<%= paciente.id %>&cita_id=<%= ci.id %>" class="btn btn-sm btn-success">
+                          <i class="bi bi-stethoscope me-1"></i> Atender
+                        </a>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="text-center py-4 text-muted">
+            <p class="mb-0">Este paciente no tiene citas agendadas registradas.</p>
+          </div>
+        <% } %>
+      </div>
+
+      <!-- Panel 3: Recetas Médicas -->
+      <div class="tab-pane fade" id="recetas-pane" role="tabpanel">
+        <% if (recetas && recetas.length > 0) { %>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light fs-8 text-uppercase">
+                <tr>
+                  <th>Código Receta</th>
+                  <th>Fecha de Emisión</th>
+                  <th>Medicamentos Prescritos</th>
+                  <th>Estado de Entrega en Farmacia</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% recetas.forEach(function(r) { %>
+                  <tr>
+                    <td class="fw-bold font-monospace text-teal"><%= r.codigo_receta %></td>
+                    <td><%= formatoFecha(r.fecha_emision) %></td>
+                    <td><%= r.total_medicamentos %> medicamento(s)</td>
+                    <td>
+                      <% if (r.entregados == r.total_medicamentos && r.total_medicamentos > 0) { %>
+                        <span class="badge bg-success">Completamente entregada</span>
+                      <% } else if (r.no_entregados > 0) { %>
+                        <span class="badge bg-warning text-dark">Con items sin existencia</span>
+                      <% } else { %>
+                        <span class="badge bg-info text-dark">Pendiente de despacho</span>
+                      <% } %>
+                    </td>
+                    <td class="text-end">
+                      <% if (puedeVerFarmacia) { %>
+                        <a href="/farmacia/dispensar/<%= r.id %>" class="btn btn-sm btn-outline-teal">
+                          <i class="bi bi-capsule me-1"></i> Ver en Farmacia
+                        </a>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="text-center py-4 text-muted">
+            <p class="mb-0">No se han emitido recetas para este paciente aún.</p>
+          </div>
+        <% } %>
+      </div>
+
+    </div>
+  </div>
+</div>
+<% } %>
+
+<%- include('../partials/footer') %>
+

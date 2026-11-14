@@ -1,0 +1,297 @@
+<%- include('../partials/header') %>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4 d-print-none">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-receipt-cutoff text-teal me-2"></i>Factura de Servicio Médico #<%= consulta.id %>
+    </h1>
+    <p class="text-muted mb-0">
+      Fecha de facturación: <strong><%= formatoFecha(consulta.fecha_consulta) %></strong> &bull;
+      Comprador / Paciente: <strong><%= consulta.paciente_nombre %> <%= consulta.paciente_apellido %></strong>
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <a href="/ecf" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i> Volver a Facturas
+    </a>
+    <% if (typeof comprobanteActivo !== 'undefined' && comprobanteActivo && comprobanteActivo.encf && !(estadoInfo && estadoInfo.esError)) { %>
+      <a href="/ecf/documento/<%= comprobanteActivo.id %>/impresion" target="_blank" rel="noopener" class="btn btn-teal btn-sm fw-semibold">
+        <i class="bi bi-file-earmark-pdf me-1"></i> Ver PDF (<%= comprobanteActivo.encf %>)
+      </a>
+    <% } %>
+    <% if (usuarioActual && usuarioActual.rol === 'ADMINISTRADOR') { %>
+      <a href="/consultas/<%= consulta.id %>" class="btn btn-outline-teal btn-sm">
+        <i class="bi bi-file-earmark-medical me-1"></i> Ver Ficha Médica
+      </a>
+    <% } %>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Columna Izquierda: Detalle Fiscal de la Factura e Historial de Emisiones -->
+  <div class="col-12 col-lg-7">
+
+    <!-- Sección de Liquidación, Cobertura ARS y Cobro al Paciente (Exclusivo Secretaría) -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-shield-check text-teal me-2"></i>Liquidación, Cobertura ARS y Cobro al Paciente
+        </h6>
+        <% if (consulta.estado_pago === 'Pagado') { %>
+          <span class="badge bg-success fs-8"><i class="bi bi-check-circle-fill me-1"></i>Liquidación Pagada</span>
+        <% } else { %>
+          <span class="badge bg-warning text-dark fs-8"><i class="bi bi-clock-history me-1"></i>Pendiente de Cobro</span>
+        <% } %>
+      </div>
+      <div class="card-body p-4">
+        <% if (consulta.estado_pago !== 'Pagado') { %>
+          <form action="/ecf/factura/<%= consulta.id %>/actualizar-liquidacion" method="POST" id="formActualizarLiquidacion" class="mb-3">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <div class="row g-3 align-items-end">
+              <div class="col-12 col-md-5">
+                <label for="fac_servicio_id" class="form-label fw-semibold fs-8 text-uppercase text-secondary">Servicio Prestado</label>
+                <select name="servicio_id" id="fac_servicio_id" class="form-select form-select-sm" onchange="recalcularLiquidacionFactura()" required>
+                  <% if (typeof servicios !== 'undefined' && servicios && servicios.length > 0) { %>
+                    <% servicios.forEach(function(s) { %>
+                      <option value="<%= s.id %>" data-precio="<%= s.precio_base %>"
+                        <%= (consulta.servicio_id == s.id) ? 'selected' : '' %>>
+                        <%= s.nombre %> &mdash; Base: <%= formatoMoneda(s.precio_base) %>
+                      </option>
+                    <% }); %>
+                  <% } %>
+                </select>
+              </div>
+
+              <div class="col-12 col-md-4">
+                <label for="fac_ars_id" class="form-label fw-semibold fs-8 text-uppercase text-secondary">ARS / Aseguradora</label>
+                <select name="ars_id" id="fac_ars_id" class="form-select form-select-sm" onchange="recalcularLiquidacionFactura()" required>
+                  <option value="0" data-tipo="PARTICULAR" <%= !consulta.ars_id ? 'selected' : '' %>>Particular / Sin Aseguradora</option>
+                  <% if (typeof arsList !== 'undefined' && arsList && arsList.length > 0) { %>
+                    <% arsList.forEach(function(ars) { %>
+                      <option value="<%= ars.id %>" <%= consulta.ars_id == ars.id ? 'selected' : '' %>>
+                        <%= ars.nombre %>
+                      </option>
+                    <% }); %>
+                  <% } %>
+                </select>
+              </div>
+
+              <div class="col-12 col-md-3 d-grid">
+                <button type="submit" class="btn btn-outline-teal btn-sm fw-semibold">
+                  <i class="bi bi-arrow-repeat me-1"></i> Actualizar Cargo
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Tarjetas del Desglose de Valores -->
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <div class="p-3 rounded-3 bg-light border text-center">
+                <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Valor Total del Servicio</span>
+                <div class="fs-5 fw-bold text-dark my-1" id="dispFacturaTotal"><%= formatoMoneda(consulta.valor_total) %></div>
+                <small class="text-muted fs-8" id="detFacturaTarifa">Tarifa pactada</small>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <div class="p-3 rounded-3 bg-teal-subtle border border-teal text-center">
+                <span class="fs-8 text-teal text-uppercase fw-semibold d-block">Monto Cubierto por ARS</span>
+                <div class="fs-5 fw-bold text-teal my-1" id="dispFacturaCubierto">- <%= formatoMoneda(consulta.valor_cubierto_ars) %></div>
+                <small class="text-secondary fs-8" id="detFacturaCobertura">Regla de aseguradora</small>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <div class="p-3 rounded-3 bg-warning-subtle border border-warning text-center">
+                <span class="fs-8 text-dark text-uppercase fw-semibold d-block">Monto que Paga el Paciente (Copago)</span>
+                <div class="fs-4 fw-bold text-danger my-1" id="dispFacturaCopago"><%= formatoMoneda(consulta.diferencia_paciente) %></div>
+                <small class="text-secondary fs-8" id="detFacturaCopago">Monto a cobrar en caja</small>
+              </div>
+            </div>
+          </div>
+        <% } else { %>
+          <div class="alert alert-success py-2 px-3 fs-8 mb-0 border-success">
+            <i class="bi bi-check-circle-fill me-1"></i>
+            Esta consulta médica ya fue <strong>cobrada y liquidada</strong>. Total: <strong><%= formatoMoneda(consulta.valor_total) %></strong> &bull; Cubierto ARS: <strong><%= formatoMoneda(consulta.valor_cubierto_ars) %></strong> &bull; Copago Paciente: <strong><%= formatoMoneda(consulta.diferencia_paciente) %></strong>.
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-building-check text-teal me-2"></i>Datos Fiscales del Servicio Facturado
+        </h6>
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3 mb-4">
+          <div class="col-12 col-sm-6">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Comprador / Paciente</span>
+            <div class="fw-bold text-dark fs-6"><%= consulta.paciente_nombre %> <%= consulta.paciente_apellido %></div>
+            <div class="text-muted fs-8 font-monospace">Identificación: <%= consulta.paciente_identificacion %></div>
+            <% if (consulta.paciente_correo) { %>
+              <div class="text-muted fs-8"><i class="bi bi-envelope me-1"></i><%= consulta.paciente_correo %></div>
+            <% } %>
+          </div>
+          <div class="col-12 col-sm-6 text-sm-end">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Cobertura ARS</span>
+            <div class="fw-bold text-teal"><%= consulta.ars_nombre || 'Particular / Sin Aseguradora' %></div>
+            <% if (consulta.paciente_afiliado) { %>
+              <div class="text-muted fs-8">No. Afiliado: <%= consulta.paciente_afiliado %></div>
+            <% } %>
+            <div class="mt-1">
+              <span class="badge <%= consulta.estado_pago === 'Pagado' ? 'bg-success' : 'bg-warning text-dark' %>">
+                Pago: <%= consulta.estado_pago %>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle mb-0">
+            <thead class="table-light fs-8 text-uppercase">
+              <tr>
+                <th>Código</th>
+                <th>Descripción Fiscal del Servicio</th>
+                <th class="text-center">Cant.</th>
+                <th class="text-end">Valor Servicio</th>
+                <th class="text-end">Cobertura ARS</th>
+                <th class="text-end">Copago Paciente</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="font-monospace fw-semibold"><%= consulta.servicio_codigo || 'MED-GEN' %></td>
+                <td>
+                  <strong class="text-dark"><%= consulta.servicio_nombre || 'Consulta Médica General' %></strong>
+                </td>
+                <td class="text-center fw-bold">1</td>
+                <td class="text-end fw-semibold"><%= formatoMoneda(consulta.valor_total) %></td>
+                <td class="text-end text-teal">- <%= formatoMoneda(consulta.valor_cubierto_ars) %></td>
+                <td class="text-end fw-bold text-danger"><%= formatoMoneda(consulta.diferencia_paciente) %></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Historial de Comprobantes de esta Factura -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-clock-history text-teal me-2"></i>Comprobantes Emitidos de esta Factura
+        </h6>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0 fs-8">
+            <thead class="table-light text-uppercase">
+              <tr>
+                <th>ID</th>
+                <th>Fecha</th>
+                <th>Tipo / eNCF</th>
+                <th>Estado</th>
+                <th>Total</th>
+                <th class="text-end"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (historialComprobantes && historialComprobantes.length > 0) { %>
+                <% historialComprobantes.forEach(function(h) { %>
+                  <tr>
+                    <td>#<%= h.id %></td>
+                    <td><%= formatoFechaHora(h.created_at) %></td>
+                    <td>
+                      <span class="badge bg-teal"><%= h.tipo_ecf %></span>
+                      <span class="font-monospace fw-bold ms-1"><%= h.encf || 'N/A' %></span>
+                    </td>
+                    <td>
+                      <span class="badge <%= h.estadoInfo.claseBadge %>"><%= h.estado %></span>
+                      <% if (h.mensaje_error) { %>
+                        <div class="text-danger mt-1"><%= h.mensaje_error %></div>
+                      <% } %>
+                    </td>
+                    <td class="fw-bold"><%= formatoMoneda(h.monto_total) %></td>
+                    <td class="text-end">
+                      <% if (h.encf || h.ecf_id_externo) { %>
+                        <div class="d-inline-flex gap-1">
+                          <a href="/ecf/documento/<%= h.id %>/impresion" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Imprimir">
+                            <i class="bi bi-printer"></i> Imprimir
+                          </a>
+                          <a href="/ecf/documento/<%= h.id %>/xml" class="btn btn-sm btn-outline-teal py-0 px-2" title="Descargar XML Firmado">
+                            <i class="bi bi-download"></i> XML
+                          </a>
+                        </div>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center py-4 text-muted">
+                    Aún no se han registrado emisiones para esta factura.
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Columna Derecha: Panel de Pago con PayPal y Panel de Emisión/Consulta e-CF -->
+  <div class="col-12 col-lg-5">
+    <%- include('../partials/paypal_widget') %>
+
+    <%- include('../partials/ecf_widget', { returnToUrl: '/ecf/factura/' + consulta.id }) %>
+  </div>
+</div>
+
+<script>
+const tarifariosFacturaConfigurados = <%- JSON.stringify(typeof tarifarios !== 'undefined' ? tarifarios : []) %>;
+
+function recalcularLiquidacionFactura() {
+  const servicioSelect = document.getElementById('fac_servicio_id');
+  const arsSelect = document.getElementById('fac_ars_id');
+  if (!servicioSelect || !arsSelect) return;
+
+  const servicioId = parseInt(servicioSelect.value, 10);
+  const arsId = parseInt(arsSelect.value, 10);
+
+  const optServicio = servicioSelect.options[servicioSelect.selectedIndex];
+  const precioBase = parseFloat(optServicio ? optServicio.getAttribute('data-precio') : 0) || 0;
+
+  let valorTotal = precioBase;
+  let valorCubierto = 0;
+  let copago = precioBase;
+
+  const tarifaMatch = tarifariosFacturaConfigurados.find(t => t.ars_id === arsId && t.servicio_id === servicioId);
+
+  if (tarifaMatch) {
+    valorTotal = parseFloat(tarifaMatch.tarifa_pactada) || precioBase;
+    const valorCob = parseFloat(tarifaMatch.valor_cobertura) || 0;
+    const copagoFijo = parseFloat(tarifaMatch.copago_fijo) || 0;
+
+    if (tarifaMatch.tipo_cobertura === 'PORCENTAJE') {
+      valorCubierto = (valorTotal * valorCob) / 100.0;
+    } else {
+      valorCubierto = Math.min(valorTotal, valorCob);
+    }
+    copago = Math.max(0, valorTotal - valorCubierto + copagoFijo);
+  }
+
+  const dispTotal = document.getElementById('dispFacturaTotal');
+  const dispCubierto = document.getElementById('dispFacturaCubierto');
+  const dispCopago = document.getElementById('dispFacturaCopago');
+  if (dispTotal) dispTotal.innerText = 'RD$ ' + valorTotal.toLocaleString('es-DO', {minimumFractionDigits: 2});
+  if (dispCubierto) dispCubierto.innerText = '- RD$ ' + valorCubierto.toLocaleString('es-DO', {minimumFractionDigits: 2});
+  if (dispCopago) dispCopago.innerText = 'RD$ ' + copago.toLocaleString('es-DO', {minimumFractionDigits: 2});
+}
+</script>
+
+<%- include('../partials/footer') %>

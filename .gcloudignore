@@ -1,0 +1,14 @@
+# Archivos que NO se suben a Cloud Build (gcloud builds submit)
+.env
+.env.*
+!.env.example
+node_modules/
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+*.p12
+*.pfx
+*.pem
+*.key

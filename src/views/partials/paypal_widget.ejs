@@ -1,0 +1,287 @@
+<%
+  const rolesAutorizadosPago = ['ADMINISTRADOR', 'SECRETARIA', 'RECEPCION'];
+  const usuarioPuedeCobrar = usuarioActual && rolesAutorizadosPago.includes(usuarioActual.rol);
+  const ppData = typeof datosPayPal !== 'undefined' && datosPayPal ? datosPayPal : null;
+  const cfgPP = ppData ? ppData.configPayPal : { env: 'sandbox', monedaFactura: 'DOP', monedaCobro: 'USD', requiereConversionMoneda: true, tasaCambioDop: 60, modoSimulacion: true, tieneCredencialesReales: false };
+  const calcPP = ppData ? ppData.calculoPayPal : null;
+  const pagoComp = ppData ? ppData.pagoCompletado : null;
+  const ultimoIntento = ppData ? ppData.ultimoIntentoPayPal : null;
+  const facturaYaPagada = consulta.estado_pago === 'Pagado' || Boolean(pagoComp);
+%>
+
+<% if (usuarioPuedeCobrar) { %>
+  <div class="card border-0 shadow-sm mt-4 d-print-none" id="panel-pago-paypal">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h6 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-paypal text-primary me-1"></i>Pago con PayPal
+      </h6>
+      <% if ((cfgPP.env || 'sandbox') !== 'live') { %>
+        <span class="badge bg-warning text-dark fs-8">Modo Prueba (Sandbox)</span>
+      <% } %>
+    </div>
+
+    <div class="card-body p-4">
+      <% if (!cfgPP.tieneCredencialesReales && usuarioActual.rol === 'ADMINISTRADOR') { %>
+        <div class="alert alert-warning py-2 px-3 fs-8 mb-3">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>Faltan las credenciales de PayPal en el servidor.
+        </div>
+      <% } %>
+
+      <div id="alerta-paypal-resultado" class="d-none mb-3"></div>
+
+      <% if (ultimoIntento && !facturaYaPagada && ['CANCELLED', 'DECLINED', 'PENDING', 'FAILED'].includes(ultimoIntento.estado)) { %>
+        <div class="alert <%= ultimoIntento.estado === 'PENDING' ? 'alert-warning' : (ultimoIntento.estado === 'CANCELLED' ? 'alert-secondary' : 'alert-danger') %> py-2 px-3 fs-8 mb-3">
+          <div class="fw-bold">
+            <i class="bi <%= ultimoIntento.estado === 'PENDING' ? 'bi-hourglass-split' : 'bi-info-circle-fill' %> me-1"></i>
+            Último intento de pago: <%= ultimoIntento.estado %>
+          </div>
+          <div><%= ultimoIntento.mensaje_estado || 'La factura continúa pendiente de pago.' %></div>
+        </div>
+      <% } %>
+
+      <% if (facturaYaPagada) { %>
+        <!-- Vista de Factura Pagada (Protección contra cobros duplicados) -->
+        <div class="p-3 rounded-3 bg-success-subtle border border-success-subtle mb-2">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="badge bg-success fs-7">
+              <i class="bi bi-check-circle-fill me-1"></i>Factura Pagada
+            </span>
+            <% if (pagoComp) { %>
+              <span class="font-monospace fs-8 fw-bold text-dark">
+                <%= pagoComp.moneda %> $<%= Number(pagoComp.importe).toFixed(2) %>
+              </span>
+            <% } %>
+          </div>
+
+          <% if (pagoComp) { %>
+            <div class="row g-2 fs-8 pt-2 border-top border-success-subtle text-dark">
+              <div class="col-6">
+                <span class="text-muted d-block">Importe Factura:</span>
+                <strong><%= formatoMoneda(pagoComp.monto_dop) %></strong>
+              </div>
+              <div class="col-6">
+                <span class="text-muted d-block">Fecha del Pago:</span>
+                <strong><%= formatoFechaHora(pagoComp.fecha_pago || pagoComp.updated_at) %></strong>
+              </div>
+              <div class="col-12">
+                <span class="text-muted d-block">ID Orden PayPal:</span>
+                <strong class="font-monospace text-break"><%= pagoComp.paypal_order_id %></strong>
+              </div>
+            </div>
+
+            <% if (pagoComp.ecf_intento_error) { %>
+              <div class="alert alert-warning border-warning mt-3 mb-0 py-2 px-3 fs-8">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                El pago se completó, pero el comprobante fiscal no se pudo emitir automáticamente. Puede emitirlo abajo sin cobrar otra vez.
+              </div>
+            <% } %>
+          <% } else { %>
+            <p class="fs-8 text-dark mb-0">
+              Esta factura ya fue registrada como <strong>Pagada</strong>. Los botones de cobro están deshabilitados para evitar cobros duplicados.
+            </p>
+          <% } %>
+
+          <div class="mt-3 pt-2 border-top border-success-subtle text-end">
+            <a href="/pagos/paypal/comprobante/<%= consulta.id %>" target="_blank" class="btn btn-outline-success btn-sm fw-bold">
+              <i class="bi bi-receipt-cutoff me-1"></i> Ver Comprobante de Pago
+            </a>
+          </div>
+        </div>
+
+      <% } else if (calcPP) { %>
+        <!-- Selección de importe desde la factura guardada y aviso claro de conversión DOP -> USD -->
+        <div class="mb-3">
+          <label for="select-criterio-paypal" class="form-label fs-8 fw-bold text-uppercase text-secondary mb-1">
+            Concepto a Pagar
+          </label>
+          <select id="select-criterio-paypal" class="form-select form-select-sm">
+            <% if (parseFloat(consulta.diferencia_paciente) > 0 && parseFloat(consulta.diferencia_paciente) !== parseFloat(consulta.valor_total)) { %>
+              <option
+                value="COPAGO"
+                data-dop="<%= Number(consulta.diferencia_paciente).toFixed(2) %>"
+                data-usd="<%= Math.max(0.01, Math.round((Number(consulta.diferencia_paciente) / cfgPP.tasaCambioDop) * 100) / 100).toFixed(2) %>"
+                selected
+              >
+                Copago del Paciente (<%= formatoMoneda(consulta.diferencia_paciente) %> DOP)
+              </option>
+            <% } %>
+            <option
+              value="TOTAL"
+              data-dop="<%= Number(consulta.valor_total).toFixed(2) %>"
+              data-usd="<%= Math.max(0.01, Math.round((Number(consulta.valor_total) / cfgPP.tasaCambioDop) * 100) / 100).toFixed(2) %>"
+              <%= parseFloat(consulta.diferencia_paciente) <= 0 ? 'selected' : '' %>
+            >
+              Valor Total del Servicio (<%= formatoMoneda(consulta.valor_total) %> DOP)
+            </option>
+          </select>
+        </div>
+
+        <div class="p-3 rounded-3 bg-light border mb-3 fs-8" id="caja-conversion-moneda">
+          <div class="d-flex justify-content-between py-1">
+            <span class="text-secondary">Importe (DOP):</span>
+            <strong class="text-dark" id="lbl-paypal-dop">RD$ <%= Number(calcPP.montoDop).toFixed(2) %> DOP</strong>
+          </div>
+          <div class="d-flex justify-content-between py-1 border-top fs-7">
+            <strong class="text-dark">Total a cobrar en PayPal:</strong>
+            <strong class="text-primary" id="lbl-paypal-usd"><%= cfgPP.monedaCobro %> $<%= calcPP.importeCobroStr %></strong>
+          </div>
+          <div class="text-muted pt-1">Tasa: 1 <%= cfgPP.monedaCobro %> = RD$ <%= Number(cfgPP.tasaCambioDop).toFixed(2) %></div>
+        </div>
+
+        <!-- Contenedor Oficial del Botón de PayPal JS SDK -->
+        <div id="paypal-button-container" class="mb-2"></div>
+
+        <% if (!(cfgPP.tieneCredencialesReales && !cfgPP.modoSimulacion && cfgPP.clientId)) { %>
+          <div class="d-grid" id="controles-sandbox-paypal">
+            <button type="button" class="btn btn-primary fw-bold py-2 shadow-sm" id="btn-pagar-paypal-exito">
+              <i class="bi bi-paypal me-1"></i> Pagar copago con PayPal (<span id="btn-lbl-usd"><%= cfgPP.monedaCobro %> $<%= calcPP.importeCobroStr %></span>)
+            </button>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (!facturaYaPagada && calcPP) { %>
+    <% if (cfgPP.tieneCredencialesReales && !cfgPP.modoSimulacion && cfgPP.clientId) { %>
+      <script src="https://www.paypal.com/sdk/js?client-id=<%= encodeURIComponent(cfgPP.clientId) %>&currency=<%= encodeURIComponent(cfgPP.monedaCobro) %>&intent=capture"></script>
+    <% } %>
+
+    <script>
+      (function() {
+        const consultaId = <%= consulta.id %>;
+        const csrfToken = '<%= csrfToken %>';
+        const monedaCobro = '<%= cfgPP.monedaCobro %>';
+        const selectCriterio = document.getElementById('select-criterio-paypal');
+        const lblDop = document.getElementById('lbl-paypal-dop');
+        const lblUsd = document.getElementById('lbl-paypal-usd');
+        const btnLblUsd = document.getElementById('btn-lbl-usd');
+        const alertaBox = document.getElementById('alerta-paypal-resultado');
+
+        function mostrarAlertaPayPal(tipo, mensaje) {
+          if (!alertaBox) return;
+          alertaBox.className = 'alert alert-' + tipo + ' py-2 px-3 fs-8 mb-3';
+          alertaBox.innerHTML = mensaje;
+          alertaBox.classList.remove('d-none');
+        }
+
+        if (selectCriterio) {
+          selectCriterio.addEventListener('change', function() {
+            const opt = selectCriterio.options[selectCriterio.selectedIndex];
+            const dop = opt.getAttribute('data-dop');
+            const usd = opt.getAttribute('data-usd');
+            if (lblDop) lblDop.textContent = 'RD$ ' + dop + ' DOP';
+            if (lblUsd) lblUsd.textContent = monedaCobro + ' $' + usd;
+            if (btnLblUsd) btnLblUsd.textContent = monedaCobro + ' $' + usd;
+          });
+        }
+
+        async function crearOrdenEnBackend(forzarSimulacion) {
+          const criterio = selectCriterio ? selectCriterio.value : 'COPAGO';
+          const resp = await fetch('/pagos/paypal/crear-orden/' + consultaId, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({
+              criterio_cobro: criterio,
+              modo_simulacion: Boolean(forzarSimulacion)
+            })
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'Error al crear la orden en el backend.');
+          }
+          return data;
+        }
+
+        async function capturarOrdenEnBackend(orderId, simulacionResultado) {
+          const resp = await fetch('/pagos/paypal/capturar-orden/' + consultaId, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({
+              orderId: orderId,
+              simulacion_resultado: simulacionResultado || 'COMPLETED'
+            })
+          });
+          const data = await resp.json();
+          return { ok: resp.ok, status: resp.status, data };
+        }
+
+        async function cancelarOrdenEnBackend(orderId) {
+          const resp = await fetch('/pagos/paypal/cancelar-orden/' + consultaId, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({ orderId: orderId })
+          });
+          return resp.json();
+        }
+
+        // Si el SDK oficial de PayPal está cargado con credenciales reales
+        if (window.paypal && typeof window.paypal.Buttons === 'function') {
+          window.paypal.Buttons({
+            createOrder: async function() {
+              const data = await crearOrdenEnBackend(false);
+              return data.orderId;
+            },
+            onApprove: async function(data) {
+              const resCap = await capturarOrdenEnBackend(data.orderID, 'COMPLETED');
+              if (resCap.ok && resCap.data.success) {
+                mostrarAlertaPayPal('success', '<strong>¡Pago completado!</strong> ' + resCap.data.message);
+                setTimeout(() => window.location.reload(), 1000);
+              } else {
+                mostrarAlertaPayPal('danger', '<strong>Pago no completado:</strong> ' + (resCap.data.error || 'Error al verificar captura.'));
+              }
+            },
+            onCancel: async function(data) {
+              if (data && data.orderID) {
+                await cancelarOrdenEnBackend(data.orderID);
+              }
+              mostrarAlertaPayPal('secondary', '<strong>Pago cancelado:</strong> Ha cerrado la ventana de PayPal sin realizar el cobro.');
+            },
+            onError: function(err) {
+              mostrarAlertaPayPal('danger', '<strong>Error en PayPal:</strong> ' + (err.message || 'No se pudo completar la operación.'));
+            }
+          }).render('#paypal-button-container');
+        }
+
+        const btnExito = document.getElementById('btn-pagar-paypal-exito');
+        const btnCancelar = document.getElementById('btn-simular-cancelacion-paypal');
+        const btnRechazo = document.getElementById('btn-simular-rechazo-paypal');
+
+        if (btnExito) {
+          btnExito.addEventListener('click', async function() {
+            btnExito.disabled = true;
+            try {
+              mostrarAlertaPayPal('info', '<span class="spinner-border spinner-border-sm me-1"></span> Procesando pago...');
+              const orden = await crearOrdenEnBackend(true);
+              const cap = await capturarOrdenEnBackend(orden.orderId, 'COMPLETED');
+              if (cap.ok && cap.data.success) {
+                mostrarAlertaPayPal('success', '<strong>¡Pago Verificado!</strong> ' + cap.data.message);
+                setTimeout(() => window.location.reload(), 900);
+              } else {
+                mostrarAlertaPayPal('danger', cap.data.error || 'No se pudo completar el pago.');
+                btnExito.disabled = false;
+              }
+            } catch (e) {
+              mostrarAlertaPayPal('danger', e.message);
+              btnExito.disabled = false;
+            }
+          });
+        }
+
+      })();
+    </script>
+  <% } %>
+<% } %>
+

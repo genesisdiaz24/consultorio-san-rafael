@@ -1,0 +1,105 @@
+<%- include('../partials/header') %>
+<% const esAdminArs = usuarioActual && usuarioActual.rol === 'ADMINISTRADOR'; %>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-shield-check text-teal me-2"></i>Aseguradoras (ARS) y Coberturas
+    </h1>
+    <p class="text-muted mb-0">Gestión de convenios, tarifarios pactados por servicio y cálculo dinámico de copagos.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/ars/calcular" class="btn btn-outline-teal fw-semibold">
+      <i class="bi bi-calculator me-1"></i> Simulador de Copagos
+    </a>
+    <% if (esAdminArs) { %>
+      <a href="/ars/nueva" class="btn btn-teal fw-semibold shadow-sm">
+        <i class="bi bi-plus-circle me-1"></i> Registrar Nueva ARS
+      </a>
+    <% } %>
+  </div>
+</div>
+
+<!-- Listado de ARS -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light fs-8 text-uppercase">
+          <tr>
+            <th>Código</th>
+            <th>Nombre de la Aseguradora (ARS)</th>
+            <th>Contacto &amp; Teléfono</th>
+            <th class="text-center">Pacientes Afiliados</th>
+            <th class="text-center">Tarifas Configuradas</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (arsList && arsList.length > 0) { %>
+            <% arsList.forEach(function(ars) { %>
+              <tr>
+                <td>
+                  <span class="badge bg-light text-dark border font-monospace">
+                    <%= ars.codigo || 'S/C' %>
+                  </span>
+                </td>
+                <td>
+                  <strong class="text-dark fs-6"><%= ars.nombre %></strong>
+                  <% if (ars.notas) { %>
+                    <small class="text-muted d-block"><%= ars.notas %></small>
+                  <% } %>
+                </td>
+                <td>
+                  <div class="fs-8"><i class="bi bi-telephone text-muted me-1"></i><%= ars.telefono || 'N/A' %></div>
+                  <% if (ars.correo) { %>
+                    <small class="text-muted"><i class="bi bi-envelope text-muted me-1"></i><%= ars.correo %></small>
+                  <% } %>
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-teal-subtle text-teal fs-7 py-2 px-3">
+                    <i class="bi bi-people me-1"></i> <%= ars.total_pacientes %>
+                  </span>
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-primary-subtle text-primary fs-7 py-2 px-3">
+                    <i class="bi bi-tags me-1"></i> <%= ars.total_tarifas %> tarifas
+                  </span>
+                </td>
+                <td class="text-end">
+                  <% if (esAdminArs) { %>
+                    <a href="/ars/<%= ars.id %>/tarifas" class="btn btn-sm btn-teal fw-semibold">
+                      <i class="bi bi-sliders me-1"></i> Configurar Tarifario
+                    </a>
+                  <% } else { %>
+                    <a href="/ars/<%= ars.id %>/tarifas" class="btn btn-sm btn-outline-teal fw-semibold">
+                      <i class="bi bi-eye me-1"></i> Ver Tarifas
+                    </a>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+            <tr>
+              <td colspan="6" class="text-center py-5 text-muted">
+                <i class="bi bi-shield-x fs-1 d-block mb-2 text-teal-light"></i>
+                <h6 class="fw-bold text-dark">No hay aseguradoras registradas</h6>
+                <% if (esAdminArs) { %>
+                  <p class="mb-3">Agregue las ARS con las que trabaja el consultorio para configurar sus coberturas.</p>
+                  <a href="/ars/nueva" class="btn btn-teal btn-sm fw-semibold">
+                    <i class="bi bi-plus-circle me-1"></i> Registrar Primera ARS
+                  </a>
+                <% } else { %>
+                  <p class="mb-0">El Administrador debe registrar las ARS con las que trabaja el consultorio.</p>
+                <% } %>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
+

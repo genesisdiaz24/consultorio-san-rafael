@@ -1,0 +1,617 @@
+<%- include('../partials/header') %>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h3 fw-bold text-dark mb-1">
+          <i class="bi bi-calendar-plus-fill text-teal me-2"></i>Agendar Cita Médica
+        </h1>
+        <p class="text-muted mb-0">Registre solicitudes telefónicas, por mensajería o presenciales con verificación de disponibilidad.</p>
+      </div>
+      <a href="/citas" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Volver a la agenda
+      </a>
+    </div>
+
+    <!-- Alerta sobre verificación de disponibilidad -->
+    <div class="alert alert-light border border-teal-subtle d-flex align-items-center p-3 mb-4 rounded-3 shadow-sm">
+      <i class="bi bi-clock-history fs-4 text-teal me-3"></i>
+      <div class="fs-7 text-secondary">
+        <strong>Control de Disponibilidad:</strong> El sistema verifica que no existan citas duplicadas en el mismo horario para garantizar la puntualidad en el consultorio.
+      </div>
+    </div>
+
+    <form action="/citas" method="POST" id="formAgendarCita" class="needs-validation" novalidate>
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+          <div class="row g-3">
+            
+            <!-- 1. Selección del Paciente con Búsqueda en Teclado y Filtrado en Tiempo Real -->
+            <div class="col-12">
+              <label for="buscar_paciente" class="form-label fw-semibold fs-7">
+                Paciente <span class="text-danger">*</span>
+              </label>
+
+              <!-- Campo oculto con el ID del paciente seleccionado -->
+              <input type="hidden" name="paciente_id" id="paciente_id" value="<%= pacienteSeleccionado ? pacienteSeleccionado.id : '' %>" required>
+
+              <div class="position-relative">
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-end-0 text-teal">
+                    <i class="bi bi-search"></i>
+                  </span>
+                  <input type="text"
+                         id="buscar_paciente"
+                         class="form-control border-start-0"
+                         placeholder="Escriba el nombre o apellido del paciente para buscar..."
+                         value="<%= pacienteSeleccionado ? (pacienteSeleccionado.nombre + ' ' + pacienteSeleccionado.apellido) : '' %>"
+                         autocomplete="off"
+                         required>
+                  <button type="button"
+                          class="btn btn-outline-secondary"
+                          id="btn_limpiar_paciente"
+                          style="<%= pacienteSeleccionado ? '' : 'display: none;' %>"
+                          title="Limpiar selección y buscar otro paciente">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+
+                <!-- Lista flotante de sugerencias filtradas en vivo -->
+                <div id="lista_pacientes_sugerencias"
+                     class="list-group position-absolute w-100 shadow-lg border mt-1"
+                     style="z-index: 1060; max-height: 270px; overflow-y: auto; display: none;">
+                </div>
+              </div>
+
+              <!-- Tarjeta de confirmación del paciente seleccionado -->
+              <div id="card_paciente_seleccionado"
+                   class="p-2 mt-2 rounded-3 bg-teal-subtle border border-teal-subtle align-items-center justify-content-between <%= pacienteSeleccionado ? 'd-flex' : 'd-none' %>">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span class="badge bg-teal"><i class="bi bi-check-circle-fill me-1"></i>Paciente Seleccionado</span>
+                  <span class="fw-bold text-dark fs-7" id="disp_nombre_paciente">
+                    <%= pacienteSeleccionado ? (pacienteSeleccionado.nombre + ' ' + pacienteSeleccionado.apellido) : '' %>
+                  </span>
+                  <small class="text-muted font-monospace" id="disp_doc_paciente">
+                    <%= pacienteSeleccionado ? ('Doc: ' + pacienteSeleccionado.identificacion) : '' %>
+                  </small>
+                </div>
+                <button type="button" class="btn btn-sm btn-link text-teal p-0 text-decoration-none fw-semibold" id="btn_cambiar_paciente">
+                  <i class="bi bi-arrow-repeat me-1"></i>Cambiar
+                </button>
+              </div>
+
+              <div class="invalid-feedback d-block" id="error_paciente" style="display: none !important;">
+                Por favor busque y seleccione un paciente registrado.
+              </div>
+
+              <div class="form-text fs-8 text-muted">
+                Escriba el nombre con el teclado para filtrar. ¿Paciente no registrado aún? <a href="/pacientes/nuevo" class="text-teal fw-semibold">Crear nuevo paciente aquí</a>
+              </div>
+            </div>
+
+            <!-- Canal de Solicitud -->
+            <div class="col-12 col-md-6">
+              <label for="canal_solicitud" class="form-label fw-semibold fs-7">Canal de Solicitud <span class="text-danger">*</span></label>
+              <select name="canal_solicitud" id="canal_solicitud" class="form-select" required>
+                <option value="Teléfono">Llamada Telefónica</option>
+                <option value="Mensajería">Mensajería (WhatsApp / Telegram / SMS)</option>
+                <option value="Presencial">Presencial (En recepción del consultorio)</option>
+              </select>
+            </div>
+
+            <!-- Servicio o Tipo de Consulta -->
+            <div class="col-12 col-md-6">
+              <label for="servicio_id" class="form-label fw-semibold fs-7">Servicio Médico Solicitado</label>
+              <select name="servicio_id" id="servicio_id" class="form-select">
+                <option value="">Consulta General (Por defecto)</option>
+                <% if (servicios && servicios.length > 0) { %>
+                  <% servicios.forEach(function(s) { %>
+                    <option value="<%= s.id %>">
+                      <%= s.nombre %> &mdash; <%= formatoMoneda(s.precio_base) %>
+                    </option>
+                  <% }); %>
+                <% } %>
+              </select>
+            </div>
+
+            <!-- 2. Fecha de la Cita (Escritura manual + Selector de calendario) -->
+            <div class="col-12 col-md-6">
+              <label for="fecha" class="form-label fw-semibold fs-7">
+                Fecha de la Cita <span class="text-danger">*</span>
+              </label>
+              <div class="input-group">
+                <input type="text"
+                       name="fecha"
+                       id="fecha"
+                       class="form-control input-fecha-hibrida"
+                       placeholder="AAAA-MM-DD o DD/MM/AAAA"
+                       value="<%= cita && cita.fecha ? cita.fecha : new Date().toISOString().split('T')[0] %>"
+                       autocomplete="off"
+                       required>
+                <input type="date"
+                       id="fecha_picker"
+                       class="picker-calendario-oculto"
+                       tabindex="-1"
+                       aria-hidden="true"
+                       style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;">
+                <button type="button"
+                        class="btn btn-outline-secondary btn-abrir-calendario"
+                        data-input-id="fecha"
+                        data-picker-id="fecha_picker"
+                        title="Abrir calendario">
+                  <i class="bi bi-calendar-event"></i>
+                </button>
+              </div>
+              <div class="invalid-feedback" id="error_fecha">
+                Fecha no válida. Ingrese una fecha correcta en formato AAAA-MM-DD o DD/MM/AAAA.
+              </div>
+              <div class="form-text fs-8 text-muted">
+                Escriba con el teclado (ej: 2026-10-20 o 20/10/2026) o elija en el calendario.
+              </div>
+            </div>
+
+            <!-- Hora de la Cita -->
+            <div class="col-12 col-md-6">
+              <label for="hora" class="form-label fw-semibold fs-7">Hora de la Cita <span class="text-danger">*</span></label>
+              <select name="hora" id="hora" class="form-select" required>
+                <option value="">Seleccione horario disponible...</option>
+                <option value="08:00:00">08:00 AM</option>
+                <option value="08:30:00">08:30 AM</option>
+                <option value="09:00:00">09:00 AM</option>
+                <option value="09:30:00">09:30 AM</option>
+                <option value="10:00:00">10:00 AM</option>
+                <option value="10:30:00">10:30 AM</option>
+                <option value="11:00:00">11:00 AM</option>
+                <option value="11:30:00">11:30 AM</option>
+                <option value="14:00:00">02:00 PM</option>
+                <option value="14:30:00">02:30 PM</option>
+                <option value="15:00:00">03:00 PM</option>
+                <option value="15:30:00">03:30 PM</option>
+                <option value="16:00:00">04:00 PM</option>
+                <option value="16:30:00">04:30 PM</option>
+                <option value="17:00:00">05:00 PM</option>
+              </select>
+            </div>
+
+            <!-- 2. Fecha de Nacimiento del Paciente (Escritura manual + Selector de calendario) -->
+            <div class="col-12 col-md-6">
+              <label for="fecha_nacimiento" class="form-label fw-semibold fs-7">
+                Fecha de Nacimiento del Paciente
+              </label>
+              <div class="input-group">
+                <input type="text"
+                       name="fecha_nacimiento"
+                       id="fecha_nacimiento"
+                       class="form-control input-fecha-hibrida"
+                       placeholder="AAAA-MM-DD o DD/MM/AAAA"
+                       value="<%= pacienteSeleccionado && pacienteSeleccionado.fecha_nacimiento ? (new Date(pacienteSeleccionado.fecha_nacimiento).toISOString().split('T')[0]) : '' %>"
+                       autocomplete="off">
+                <input type="date"
+                       id="fecha_nacimiento_picker"
+                       class="picker-calendario-oculto"
+                       tabindex="-1"
+                       aria-hidden="true"
+                       style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;">
+                <button type="button"
+                        class="btn btn-outline-secondary btn-abrir-calendario"
+                        data-input-id="fecha_nacimiento"
+                        data-picker-id="fecha_nacimiento_picker"
+                        title="Abrir calendario">
+                  <i class="bi bi-calendar-event"></i>
+                </button>
+              </div>
+              <div class="invalid-feedback" id="error_fecha_nacimiento">
+                Fecha de nacimiento no válida. Ingrese una fecha correcta en formato AAAA-MM-DD o DD/MM/AAAA.
+              </div>
+              <div class="form-text fs-8 text-muted">
+                Escriba con el teclado (ej: 1990-05-15 o 15/05/1990) o elija en el calendario.
+              </div>
+            </div>
+
+            <!-- Datos de Contacto para Confirmación -->
+            <div class="col-12 col-md-6">
+              <label for="telefono_contacto" class="form-label fw-semibold fs-7">Teléfono de Contacto <span class="text-danger">*</span></label>
+              <input type="tel" name="telefono_contacto" id="telefono_contacto" value="<%= pacienteSeleccionado ? pacienteSeleccionado.telefono : '' %>" class="form-control" placeholder="Ej: 809-555-0123" required>
+            </div>
+
+            <div class="col-12">
+              <label for="correo_contacto" class="form-label fw-semibold fs-7">Correo de Contacto</label>
+              <input type="email" name="correo_contacto" id="correo_contacto" value="<%= pacienteSeleccionado ? (pacienteSeleccionado.correo || '') : '' %>" class="form-control" placeholder="Ej: paciente@correo.com">
+            </div>
+
+            <!-- Motivo de la Cita -->
+            <div class="col-12">
+              <label for="motivo" class="form-label fw-semibold fs-7">Motivo General de Consulta <span class="text-danger">*</span></label>
+              <textarea name="motivo" id="motivo" rows="2" class="form-control" placeholder="Describa el síntoma principal o razón de la visita (Ej: Dolor de cabeza frecuente, evaluación de rutina...)" required></textarea>
+            </div>
+
+            <!-- Observaciones internas -->
+            <div class="col-12">
+              <label for="notas_recepcion" class="form-label fw-semibold fs-7">Notas Internas de Recepción</label>
+              <input type="text" name="notas_recepcion" id="notas_recepcion" class="form-control" placeholder="Ej: Paciente solicitó médico de preferencia; traerá analíticas previas...">
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mb-5">
+        <a href="/citas" class="btn btn-outline-secondary px-4">Cancelar</a>
+        <button type="submit" class="btn btn-teal fw-semibold px-5 shadow-sm">
+          <i class="bi bi-calendar-check me-1"></i> Guardar Cita
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// 1. Catálogo completo de pacientes precargado desde el servidor para filtrado instantáneo
+const catalogoPacientes = <%- JSON.stringify(pacientes || []) %>;
+
+// 2. Función de normalización de cadenas (quita tildes y pasa a minúsculas)
+function limpiarTexto(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+// 3. Normalizar y validar fechas (AAAA-MM-DD o DD/MM/AAAA)
+function normalizarFechaCliente(str) {
+  if (!str || typeof str !== 'string') return null;
+  const s = str.trim();
+
+  // AAAA-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+      return s;
+    }
+    return null;
+  }
+
+  // DD/MM/AAAA o DD-MM-AAAA
+  const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    const d = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const y = parseInt(match[3], 10);
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+      const mm = String(m).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      return `${y}-${mm}-${dd}`;
+    }
+    return null;
+  }
+
+  return null;
+}
+
+// Formatear fecha para visualización en inputs o sugerencias
+function formatearFechaIso(fechaRaw) {
+  if (!fechaRaw) return '';
+  try {
+    const d = new Date(fechaRaw);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  } catch (_) {
+    return '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  // ELEMENTOS DE BÚSQUEDA DE PACIENTE
+  const inputBuscar = document.getElementById('buscar_paciente');
+  const inputPacienteId = document.getElementById('paciente_id');
+  const listaSugerencias = document.getElementById('lista_pacientes_sugerencias');
+  const cardSeleccionado = document.getElementById('card_paciente_seleccionado');
+  const dispNombre = document.getElementById('disp_nombre_paciente');
+  const dispDoc = document.getElementById('disp_doc_paciente');
+  const btnLimpiar = document.getElementById('btn_limpiar_paciente');
+  const btnCambiar = document.getElementById('btn_cambiar_paciente');
+  const errorPaciente = document.getElementById('error_paciente');
+
+  // CAMPOS DE CONTACTO Y FECHA DE NACIMIENTO
+  const inputTel = document.getElementById('telefono_contacto');
+  const inputCorreo = document.getElementById('correo_contacto');
+  const inputFechaNac = document.getElementById('fecha_nacimiento');
+
+  let indiceResaltado = -1;
+
+  // Filtrar pacientes en tiempo real mientras se escribe con el teclado
+  inputBuscar.addEventListener('input', function () {
+    const termino = limpiarTexto(this.value);
+    indiceResaltado = -1;
+
+    // Si borró el texto, limpiar selección
+    if (!termino) {
+      inputPacienteId.value = '';
+      listaSugerencias.style.display = 'none';
+      btnLimpiar.style.display = 'none';
+      cardSeleccionado.classList.add('d-none');
+      cardSeleccionado.classList.remove('d-flex');
+      return;
+    }
+
+    btnLimpiar.style.display = 'block';
+
+    // Filtrar pacientes por nombre, apellido o identificación
+    const coincidencias = catalogoPacientes.filter(function (p) {
+      const nombreCompleto = limpiarTexto(p.nombre + ' ' + p.apellido);
+      const ident = limpiarTexto(p.identificacion);
+      return nombreCompleto.includes(termino) || ident.includes(termino);
+    });
+
+    renderizarSugerencias(coincidencias, termino);
+  });
+
+  // Mostrar sugerencias cuando recibe foco si hay texto o para explorar
+  inputBuscar.addEventListener('focus', function () {
+    const termino = limpiarTexto(this.value);
+    if (termino && !inputPacienteId.value) {
+      const coincidencias = catalogoPacientes.filter(function (p) {
+        return limpiarTexto(p.nombre + ' ' + p.apellido).includes(termino) || limpiarTexto(p.identificacion).includes(termino);
+      });
+      renderizarSugerencias(coincidencias, termino);
+    }
+  });
+
+  // Navegación con teclado en las sugerencias (Flechas y Enter)
+  inputBuscar.addEventListener('keydown', function (e) {
+    const items = listaSugerencias.querySelectorAll('.item-sugerencia-paciente');
+    if (listaSugerencias.style.display === 'block' && items.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        indiceResaltado = (indiceResaltado + 1) % items.length;
+        actualizarResaltado(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        indiceResaltado = (indiceResaltado - 1 + items.length) % items.length;
+        actualizarResaltado(items);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (indiceResaltado >= 0 && items[indiceResaltado]) {
+          items[indiceResaltado].click();
+        } else if (items.length === 1) {
+          items[0].click();
+        }
+      } else if (e.key === 'Escape') {
+        listaSugerencias.style.display = 'none';
+      }
+    }
+  });
+
+  function actualizarResaltado(items) {
+    items.forEach((item, idx) => {
+      if (idx === indiceResaltado) {
+        item.classList.add('active', 'bg-teal', 'text-white');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('active', 'bg-teal', 'text-white');
+      }
+    });
+  }
+
+  function renderizarSugerencias(coincidencias, termino) {
+    listaSugerencias.innerHTML = '';
+
+    if (coincidencias.length === 0) {
+      const itemVacio = document.createElement('div');
+      itemVacio.className = 'list-group-item py-3 text-muted text-center fs-8';
+      itemVacio.innerHTML = `
+        <i class="bi bi-search me-1"></i>No se encontró ningún paciente con "<strong>${inputBuscar.value}</strong>".
+        <a href="/pacientes/nuevo" class="text-teal fw-semibold d-block mt-1">
+          <i class="bi bi-person-plus me-1"></i>Registrar nuevo paciente
+        </a>
+      `;
+      listaSugerencias.appendChild(itemVacio);
+      listaSugerencias.style.display = 'block';
+      return;
+    }
+
+    coincidencias.slice(0, 15).forEach(function (p) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'list-group-item list-group-item-action py-2 px-3 item-sugerencia-paciente text-start';
+      
+      const nacTexto = p.fecha_nacimiento ? (' &bull; Nac: ' + formatearFechaIso(p.fecha_nacimiento)) : '';
+      btn.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <strong class="text-dark fs-7">${p.nombre} ${p.apellido}</strong>
+            <div class="text-muted fs-8 font-monospace">
+              Doc: ${p.identificacion || 'S/D'} &bull; Tel: ${p.telefono || 'S/T'}${nacTexto}
+            </div>
+          </div>
+          <span class="badge bg-light text-teal border border-teal-subtle">Seleccionar</span>
+        </div>
+      `;
+
+      btn.addEventListener('click', function () {
+        seleccionarPaciente(p);
+      });
+
+      listaSugerencias.appendChild(btn);
+    });
+
+    listaSugerencias.style.display = 'block';
+  }
+
+  function seleccionarPaciente(p) {
+    inputPacienteId.value = p.id;
+    inputBuscar.value = p.nombre + ' ' + p.apellido;
+    inputBuscar.classList.remove('is-invalid');
+    if (errorPaciente) errorPaciente.style.setProperty('display', 'none', 'important');
+
+    // Actualizar tarjeta visual
+    dispNombre.textContent = p.nombre + ' ' + p.apellido;
+    dispDoc.textContent = p.identificacion ? `(${p.identificacion})` : '';
+    cardSeleccionado.classList.remove('d-none');
+    cardSeleccionado.classList.add('d-flex');
+    btnLimpiar.style.display = 'block';
+    listaSugerencias.style.display = 'none';
+
+    // Rellenar automáticamente datos de contacto
+    if (inputTel && p.telefono) inputTel.value = p.telefono;
+    if (inputCorreo && p.correo) inputCorreo.value = p.correo;
+
+    // Rellenar automáticamente la fecha de nacimiento si el paciente la tiene registrada
+    if (inputFechaNac && p.fecha_nacimiento) {
+      inputFechaNac.value = formatearFechaIso(p.fecha_nacimiento);
+      inputFechaNac.classList.remove('is-invalid');
+    }
+  }
+
+  function limpiarSeleccionPaciente() {
+    inputPacienteId.value = '';
+    inputBuscar.value = '';
+    btnLimpiar.style.display = 'none';
+    cardSeleccionado.classList.add('d-none');
+    cardSeleccionado.classList.remove('d-flex');
+    listaSugerencias.style.display = 'none';
+    inputBuscar.focus();
+  }
+
+  btnLimpiar.addEventListener('click', limpiarSeleccionPaciente);
+  if (btnCambiar) btnCambiar.addEventListener('click', limpiarSeleccionPaciente);
+
+  // Cerrar lista al hacer clic fuera
+  document.addEventListener('click', function (e) {
+    if (!inputBuscar.contains(e.target) && !listaSugerencias.contains(e.target)) {
+      listaSugerencias.style.display = 'none';
+    }
+  });
+
+  // =========================================================================
+  // GESTIÓN HÍBRIDA DE FECHAS: ESCRITURA MANUAL CON TECLADO + SELECTOR CALENDARIO
+  // =========================================================================
+  const btnsCalendario = document.querySelectorAll('.btn-abrir-calendario');
+
+  btnsCalendario.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const inputId = this.getAttribute('data-input-id');
+      const pickerId = this.getAttribute('data-picker-id');
+      const textInput = document.getElementById(inputId);
+      const picker = document.getElementById(pickerId);
+
+      if (!textInput || !picker) return;
+
+      // Si hay una fecha escrita manualmente válida, sincronizar hacia el picker antes de abrir
+      const iso = normalizarFechaCliente(textInput.value);
+      if (iso) {
+        picker.value = iso;
+      }
+
+      // Abrir selector gráfico del navegador
+      if (typeof picker.showPicker === 'function') {
+        try {
+          picker.showPicker();
+          return;
+        } catch (_) {}
+      }
+      picker.focus();
+      picker.click();
+    });
+  });
+
+  // Sincronizar desde el selector de calendario hacia el campo de texto manual
+  const pickersOcultos = document.querySelectorAll('.picker-calendario-oculto');
+  pickersOcultos.forEach(function (picker) {
+    picker.addEventListener('change', function () {
+      const targetId = this.id.replace('_picker', '');
+      const textInput = document.getElementById(targetId);
+      if (textInput && this.value) {
+        textInput.value = this.value; // Formato YYYY-MM-DD
+        textInput.classList.remove('is-invalid');
+      }
+    });
+  });
+
+  // Validar y normalizar campos de fecha al perder foco (on blur)
+  const inputsFecha = document.querySelectorAll('.input-fecha-hibrida');
+  inputsFecha.forEach(function (input) {
+    input.addEventListener('blur', function () {
+      const val = this.value.trim();
+      if (!val) {
+        if (this.hasAttribute('required')) {
+          this.classList.add('is-invalid');
+        } else {
+          this.classList.remove('is-invalid');
+        }
+        return;
+      }
+
+      const iso = normalizarFechaCliente(val);
+      if (iso) {
+        this.classList.remove('is-invalid');
+        // Sincronizar picker asociado
+        const picker = document.getElementById(this.id + '_picker');
+        if (picker) picker.value = iso;
+      } else {
+        this.classList.add('is-invalid');
+      }
+    });
+
+    input.addEventListener('input', function () {
+      if (this.classList.contains('is-invalid')) {
+        const iso = normalizarFechaCliente(this.value);
+        if (iso) this.classList.remove('is-invalid');
+      }
+    });
+  });
+
+  // VALIDACIÓN PREVIA AL ENVÍO DEL FORMULARIO
+  const form = document.getElementById('formAgendarCita');
+  form.addEventListener('submit', function (e) {
+    let tieneError = false;
+
+    // 1. Validar que se haya seleccionado un paciente
+    if (!inputPacienteId.value) {
+      e.preventDefault();
+      inputBuscar.classList.add('is-invalid');
+      if (errorPaciente) errorPaciente.style.setProperty('display', 'block', 'important');
+      inputBuscar.focus();
+      tieneError = true;
+    } else {
+      inputBuscar.classList.remove('is-invalid');
+      if (errorPaciente) errorPaciente.style.setProperty('display', 'none', 'important');
+    }
+
+    // 2. Validar fecha de la cita
+    const inputFechaCita = document.getElementById('fecha');
+    const isoCita = normalizarFechaCliente(inputFechaCita.value);
+    if (!isoCita) {
+      e.preventDefault();
+      inputFechaCita.classList.add('is-invalid');
+      if (!tieneError) inputFechaCita.focus();
+      tieneError = true;
+    } else {
+      inputFechaCita.classList.remove('is-invalid');
+      // Asegurar formato canónico ISO al enviar
+      inputFechaCita.value = isoCita;
+    }
+
+    // 3. Validar fecha de nacimiento si fue proporcionada
+    if (inputFechaNac && inputFechaNac.value.trim()) {
+      const isoNac = normalizarFechaCliente(inputFechaNac.value);
+      if (!isoNac) {
+        e.preventDefault();
+        inputFechaNac.classList.add('is-invalid');
+        if (!tieneError) inputFechaNac.focus();
+        tieneError = true;
+      } else {
+        inputFechaNac.classList.remove('is-invalid');
+        // Asegurar formato canónico ISO al enviar
+        inputFechaNac.value = isoNac;
+      }
+    }
+  });
+});
+</script>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,488 @@
+<%- include('../partials/header') %>
+
+<div class="row g-4">
+  <!-- Columna Principal: Chat Box del Asistente IA -->
+  <div class="col-12 col-lg-8 col-xl-9">
+    <div class="card border-0 shadow-sm d-flex flex-column" style="min-height: 720px; height: calc(100vh - 180px);">
+      <!-- Cabecera del Chat -->
+      <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+          <div class="avatar-ia rounded-circle bg-teal text-white d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; font-size: 1.3rem;">
+            <i class="bi bi-robot"></i>
+          </div>
+          <div>
+            <div class="d-flex align-items-center gap-2">
+              <h5 class="fw-bold mb-0 text-dark">Asistente IA de Farmacia Interna</h5>
+              <span class="badge bg-success-subtle text-success border border-success fs-8">
+                <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> En Línea
+              </span>
+            </div>
+            <small class="text-muted fs-8">Especializado exclusivamente en medicamentos, inventario, vencimientos y recetas</small>
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="limpiarChat()" title="Reiniciar conversación">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Reiniciar
+          </button>
+          <a href="/farmacia/inventario" class="btn btn-sm btn-outline-teal" title="Ver Inventario">
+            <i class="bi bi-boxes me-1"></i> Inventario
+          </a>
+        </div>
+      </div>
+
+      <!-- Contenedor de Mensajes con Scroll Automático -->
+      <div id="chatMensajes" class="card-body p-4 overflow-auto flex-grow-1" style="background-color: #f8fafc;">
+        <!-- Mensaje Inicial de Bienvenida de la IA -->
+        <div class="mensaje-fila d-flex mb-4">
+          <div class="avatar-msg me-2 flex-shrink-0">
+            <div class="rounded-circle bg-teal text-white d-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+              <i class="bi bi-robot fs-7"></i>
+            </div>
+          </div>
+          <div class="mensaje-burbuja bg-white border rounded-3 p-3 shadow-xs text-dark" style="max-width: 85%;">
+            <div class="fw-semibold text-teal fs-8 mb-1">Asistente IA &bull; Farmacia Interna</div>
+            <p class="mb-2">
+              👋 <strong>¡Hola! Soy tu asistente de IA para Farmacia Interna.</strong>
+            </p>
+            <p class="mb-2 fs-7 text-secondary">
+              Puedo ayudarte en lenguaje natural consultando los datos reales del sistema en tiempo real:
+            </p>
+            <ul class="fs-7 text-secondary mb-3 ps-3">
+              <li><strong>Buscar medicamentos</strong> y verificar su ubicación física, lote y concentración.</li>
+              <li><strong>Consultar existencias</strong>, stock bajo y medicamentos agotados.</li>
+              <li><strong>Revisar fechas de vencimiento</strong> y lotes que caducan en los próximos 90 días.</li>
+              <li><strong>Consultar recetas médicas pendientes</strong> de dispensar y pacientes en espera.</li>
+              <li><strong>Auditar qué se entregó</strong> o qué quedó sin entregar (con sus motivos registrados).</li>
+              <li><strong>Consultar el kardex</strong> y movimientos de inventario recientes.</li>
+              <li><strong>Sugerir reposición</strong> basada en el consumo y la rotación histórica real.</li>
+            </ul>
+            <div class="alert alert-info border-info py-2 px-3 mb-2 fs-8">
+              <i class="bi bi-shield-check me-1"></i>
+              <strong>Seguridad Human-in-the-Loop:</strong> Si me pides registrar una entrega, marcar un ítem como no entregado o modificar existencias, <strong>primero te mostraré el impacto exacto y te solicitaré confirmación</strong> antes de aplicar cambios en la base de datos.
+            </div>
+            <div class="text-muted fs-8 fst-italic">
+              *Nota: No gestiono citas, cobros de secretaría ni diagnósticos clínicos fuera de farmacia.*
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sugerencias Rápidas de Pregunta (Chips) -->
+      <div class="px-4 py-2 bg-white border-top border-bottom">
+        <div class="d-flex align-items-center gap-1 overflow-x-auto pb-1" style="white-space: nowrap;">
+          <small class="text-muted fs-8 fw-semibold me-1"><i class="bi bi-lightbulb text-warning me-1"></i>Sugerencias:</small>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('¿Qué medicamentos están agotados?')">
+            🔴 Medicamentos agotados
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('¿Cuáles tienen stock bajo?')">
+            🟡 Stock bajo
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('¿Hay lotes próximos a vencer?')">
+            📅 Próximos a vencer
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('¿Qué recetas médicas están pendientes?')">
+            📋 Recetas pendientes
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('¿Qué me sugieres reponer según la rotación?')">
+            🤖 Sugerencias de reposición
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('Muéstrame los últimos movimientos del kardex')">
+            📑 Últimos movimientos
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('Me duele la cabeza, ¿qué medicamento me recomiendas?')">
+            🤕 Dolor de cabeza
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('Me duele la barriga, ¿qué me recomiendas?')">
+            🤢 Dolor de barriga
+          </button>
+          <button type="button" class="btn btn-sm btn-light border fs-8 text-dark rounded-pill py-1 px-3" onclick="usarSugerencia('No hay acetaminofén, ¿qué otro medicamento hace la misma función?')">
+            🔁 Sustituto de Acetaminofén
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra de Entrada de Mensaje -->
+      <div class="card-footer bg-white p-3 border-0">
+        <form id="formChat" onsubmit="enviarMensaje(event)" class="d-flex gap-2 align-items-end">
+          <input type="hidden" name="_csrf" id="csrfTokenChat" value="<%= csrfToken %>">
+          <div class="flex-grow-1 position-relative">
+            <textarea
+              id="inputMensaje"
+              class="form-control border shadow-xs"
+              rows="1"
+              style="resize: none; max-height: 120px; padding-right: 40px;"
+              placeholder="Escribe tu consulta o instrucción (ej: 'Busca Amoxicilina' o '¿Qué medicamentos están agotados?')..."
+              onkeydown="manejarEnter(event)"
+              required
+            ></textarea>
+          </div>
+          <button id="btnEnviar" type="submit" class="btn btn-teal px-4 fw-semibold shadow-sm" style="height: 42px;">
+            <i class="bi bi-send-fill me-1"></i> Enviar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Columna Lateral: Estado del Almacén y Guía Rápida -->
+  <div class="col-12 col-lg-4 col-xl-3">
+    <!-- Tarjeta de Contexto Rápido de Farmacia -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-hospital text-teal me-2"></i>Estado del Inventario
+        </h6>
+      </div>
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+          <span class="fs-8 text-secondary">Fármacos en Catálogo:</span>
+          <span class="badge bg-light text-dark border fw-bold"><%= stats.total_medicamentos || 0 %></span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+          <span class="fs-8 text-secondary">Agotados (Stock 0):</span>
+          <span class="badge bg-danger"><%= stats.agotados || 0 %></span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+          <span class="fs-8 text-secondary">Stock Bajo (Mínimo):</span>
+          <span class="badge bg-warning text-dark"><%= stats.stock_bajo || 0 %></span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center py-2">
+          <span class="fs-8 text-secondary">Recetas Pendientes:</span>
+          <span class="badge bg-info text-dark"><%= stats.recetas_pendientes || 0 %></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reglas de Seguridad y Human-in-the-Loop -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-shield-lock text-teal me-2"></i>Reglas del Asistente
+        </h6>
+      </div>
+      <div class="card-body p-3 fs-8 text-secondary">
+        <div class="mb-2">
+          <strong class="text-dark d-block mb-1">✔ Tareas Permitidas:</strong>
+          Consultar medicamentos, existencias, vencimientos, recetas, kardex, sugerencias de abastecimiento, opciones para síntomas comunes (dolor de cabeza, barriga) y sustitutos cuando un medicamento está agotado.
+        </div>
+        <div class="mb-2">
+          <strong class="text-dark d-block mb-1">✔ Confirmación Obligatoria:</strong>
+          Para modificar existencias o asentar entregas, la IA siempre presentará los datos para tu visto bueno.
+        </div>
+        <div>
+          <strong class="text-dark d-block mb-1">⛔ Restricción de Alcance:</strong>
+          No se permite consultar ni alterar citas, cobros de secretaría, facturación e-CF ni diagnósticos clínicos.
+        </div>
+      </div>
+    </div>
+
+    <!-- Accesos Rápidos a Módulos de Farmacia -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-link-45deg text-teal me-2"></i>Módulos de Farmacia
+        </h6>
+      </div>
+      <div class="list-group list-group-flush fs-8">
+        <a href="/farmacia/dispensar" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+          <span><i class="bi bi-check2-circle text-teal me-2"></i>Dispensar Recetas</span>
+          <i class="bi bi-chevron-right text-muted"></i>
+        </a>
+        <a href="/farmacia/inventario" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+          <span><i class="bi bi-boxes text-teal me-2"></i>Inventario de Medicamentos</span>
+          <i class="bi bi-chevron-right text-muted"></i>
+        </a>
+        <a href="/farmacia/movimientos" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+          <span><i class="bi bi-clock-history text-teal me-2"></i>Kardex y Movimientos</span>
+          <i class="bi bi-chevron-right text-muted"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const csrfToken = document.getElementById('csrfTokenChat').value;
+const chatMensajes = document.getElementById('chatMensajes');
+const inputMensaje = document.getElementById('inputMensaje');
+const btnEnviar = document.getElementById('btnEnviar');
+
+function scrollAlFinal() {
+  chatMensajes.scrollTop = chatMensajes.scrollHeight;
+}
+
+function manejarEnter(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    enviarMensaje(event);
+  }
+}
+
+function usarSugerencia(texto) {
+  inputMensaje.value = texto;
+  inputMensaje.focus();
+  enviarMensaje(new Event('submit'));
+}
+
+function limpiarChat() {
+  if (!confirm('¿Deseas reiniciar la conversación del asistente?')) return;
+  window.location.reload();
+}
+
+function formatearTextoMarkdown(texto) {
+  if (!texto) return '';
+  let html = String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Negrita
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Cursiva
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Código inline
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-light px-1 text-teal border rounded">$1</code>');
+  // Saltos de línea
+  html = html.replace(/\n\n/g, '<br><br>');
+  html = html.replace(/\n/g, '<br>');
+
+  return html;
+}
+
+function agregarBurbujaUsuario(texto) {
+  const div = document.createElement('div');
+  div.className = 'mensaje-fila d-flex justify-content-end mb-4';
+  div.innerHTML = `
+    <div class="mensaje-burbuja bg-teal text-white rounded-3 p-3 shadow-xs" style="max-width: 80%;">
+      <div class="fs-8 text-white-50 text-end mb-1">Tú (Farmacéutica)</div>
+      <div class="fs-7">${formatearTextoMarkdown(texto)}</div>
+    </div>
+  `;
+  chatMensajes.appendChild(div);
+  scrollAlFinal();
+}
+
+function agregarBurbujaCargando() {
+  const id = 'cargando-' + Date.now();
+  const div = document.createElement('div');
+  div.id = id;
+  div.className = 'mensaje-fila d-flex mb-4';
+  div.innerHTML = `
+    <div class="avatar-msg me-2 flex-shrink-0">
+      <div class="rounded-circle bg-teal text-white d-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+        <i class="bi bi-robot fs-7"></i>
+      </div>
+    </div>
+    <div class="mensaje-burbuja bg-white border rounded-3 p-3 shadow-xs text-secondary" style="max-width: 80%;">
+      <div class="d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm text-teal" role="status"></div>
+        <span class="fs-7">Consultando base de datos de farmacia...</span>
+      </div>
+    </div>
+  `;
+  chatMensajes.appendChild(div);
+  scrollAlFinal();
+  return id;
+}
+
+function agregarBurbujaIa(data) {
+  const div = document.createElement('div');
+  div.className = 'mensaje-fila d-flex mb-4';
+
+  let iconoCabecera = 'bi-robot';
+  let colorBadge = 'text-teal';
+  let badgeTexto = 'Asistente IA';
+
+  if (data.tipo === 'FUERA_DE_ALCANCE') {
+    iconoCabecera = 'bi-shield-exclamation';
+    colorBadge = 'text-warning';
+    badgeTexto = 'Límite de Alcance';
+  } else if (data.tipo === 'CONFIRMACION_REQUERIDA') {
+    iconoCabecera = 'bi-exclamation-triangle';
+    colorBadge = 'text-warning';
+    badgeTexto = 'Confirmación Requerida';
+  } else if (data.tipo === 'EXITO') {
+    iconoCabecera = 'bi-check2-circle';
+    colorBadge = 'text-success';
+    badgeTexto = 'Operación Completada';
+  }
+
+  let tarjetaAccionHtml = '';
+  if (data.accionPendiente) {
+    const acc = data.accionPendiente;
+    tarjetaAccionHtml = `
+      <div class="card border-warning bg-warning-subtle shadow-xs mt-3 mb-2">
+        <div class="card-header bg-warning border-warning text-dark py-2 px-3 fw-bold fs-7 d-flex align-items-center gap-2">
+          <i class="bi bi-shield-exclamation"></i> ${acc.titulo || 'Confirmación Requerida'}
+        </div>
+        <div class="card-body p-3 bg-white">
+          <p class="fs-8 text-secondary mb-2">Por favor verifica los detalles antes de que la IA aplique el cambio en la base de datos:</p>
+          <table class="table table-sm table-bordered fs-8 mb-3">
+            <tbody>
+              ${(acc.detalles || []).map(d => `
+                <tr>
+                  <th class="bg-light" style="width: 35%;">${d.etiqueta}</th>
+                  <td class="fw-semibold text-dark">${d.valor}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-success fw-bold flex-grow-1" onclick="confirmarAccion('${acc.id}', this)">
+              <i class="bi bi-check-lg me-1"></i> Confirmar y Aplicar Cambio
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="cancelarAccion('${acc.id}', this)">
+              <i class="bi bi-x-lg me-1"></i> Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  div.innerHTML = `
+    <div class="avatar-msg me-2 flex-shrink-0">
+      <div class="rounded-circle bg-teal text-white d-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+        <i class="bi ${iconoCabecera} fs-7"></i>
+      </div>
+    </div>
+    <div class="mensaje-burbuja bg-white border rounded-3 p-3 shadow-xs text-dark" style="max-width: 85%;">
+      <div class="fw-semibold ${colorBadge} fs-8 mb-1">
+        <i class="bi ${iconoCabecera} me-1"></i>${badgeTexto} &bull; Farmacia
+      </div>
+      <div class="fs-7 text-dark">${formatearTextoMarkdown(data.respuesta)}</div>
+      ${tarjetaAccionHtml}
+    </div>
+  `;
+
+  chatMensajes.appendChild(div);
+  scrollAlFinal();
+}
+
+async function enviarMensaje(event) {
+  if (event) event.preventDefault();
+  const texto = inputMensaje.value.trim();
+  if (!texto) return;
+
+  // Agregar mensaje del usuario en pantalla
+  agregarBurbujaUsuario(texto);
+  inputMensaje.value = '';
+  inputMensaje.style.height = 'auto';
+
+  // Desactivar controles mientras responde
+  inputMensaje.disabled = true;
+  btnEnviar.disabled = true;
+  const cargandoId = agregarBurbujaCargando();
+
+  try {
+    const res = await fetch('/farmacia/chat/mensaje', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+      body: JSON.stringify({ mensaje: texto }),
+    });
+
+    const data = await res.json();
+
+    // Remover spinner
+    const spinner = document.getElementById(cargandoId);
+    if (spinner) spinner.remove();
+
+    agregarBurbujaIa(data);
+  } catch (err) {
+    const spinner = document.getElementById(cargandoId);
+    if (spinner) spinner.remove();
+
+    agregarBurbujaIa({
+      tipo: 'ERROR',
+      respuesta: '❌ Ocurrió un error al contactar el servidor: ' + err.message,
+    });
+  } finally {
+    inputMensaje.disabled = false;
+    btnEnviar.disabled = false;
+    inputMensaje.focus();
+    scrollAlFinal();
+  }
+}
+
+async function confirmarAccion(accionId, boton) {
+  if (boton) {
+    boton.disabled = true;
+    boton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Ejecutando...';
+  }
+
+  const cargandoId = agregarBurbujaCargando();
+
+  try {
+    const res = await fetch('/farmacia/chat/mensaje', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+      body: JSON.stringify({ accionConfirmadaId: accionId }),
+    });
+
+    const data = await res.json();
+    const spinner = document.getElementById(cargandoId);
+    if (spinner) spinner.remove();
+
+    // Desactivar botones de la tarjeta
+    if (boton && boton.closest('.card')) {
+      const parentCard = boton.closest('.card');
+      parentCard.querySelectorAll('button').forEach(b => b.disabled = true);
+    }
+
+    agregarBurbujaIa(data);
+  } catch (err) {
+    const spinner = document.getElementById(cargandoId);
+    if (spinner) spinner.remove();
+    agregarBurbujaIa({
+      tipo: 'ERROR',
+      respuesta: '❌ Error al confirmar la acción: ' + err.message,
+    });
+  } finally {
+    scrollAlFinal();
+  }
+}
+
+async function cancelarAccion(accionId, boton) {
+  if (boton) {
+    boton.disabled = true;
+  }
+
+  try {
+    const res = await fetch('/farmacia/chat/mensaje', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+      body: JSON.stringify({ cancelarAccionId: accionId }),
+    });
+
+    const data = await res.json();
+
+    if (boton && boton.closest('.card')) {
+      const parentCard = boton.closest('.card');
+      parentCard.querySelectorAll('button').forEach(b => b.disabled = true);
+      parentCard.classList.remove('bg-warning-subtle');
+      parentCard.classList.add('bg-secondary-subtle');
+    }
+
+    agregarBurbujaIa(data);
+  } catch (err) {
+    agregarBurbujaIa({
+      tipo: 'ERROR',
+      respuesta: 'Error al cancelar la operación: ' + err.message,
+    });
+  } finally {
+    scrollAlFinal();
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>
+

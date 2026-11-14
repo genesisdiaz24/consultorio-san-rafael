@@ -1,0 +1,252 @@
+/* ====================================================================
+   CONSULTORIO MÉDICO SAN RAFAEL - ESTILOS PERSONALIZADOS & RESPONSIVOS
+   ==================================================================== */
+
+:root {
+  --color-teal: #0d9488;
+  --color-teal-dark: #0f766e;
+  --color-teal-light: #ccfbf1;
+  --color-slate: #0f172a;
+  --color-slate-muted: #64748b;
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  font-family: var(--font-family-base);
+  color: #1e293b;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.main-content {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
+footer {
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.auth-logo-circle {
+  width: 72px;
+  height: 72px;
+}
+
+.btn-toggle-password {
+  cursor: pointer;
+  user-select: none;
+}
+
+.btn-toggle-password:hover {
+  color: var(--color-teal) !important;
+}
+
+/* Colores personalizados del consultorio */
+.bg-teal {
+  background-color: var(--color-teal) !important;
+}
+
+.text-teal {
+  color: var(--color-teal) !important;
+}
+
+.text-teal-light {
+  color: var(--color-teal-light) !important;
+}
+
+.bg-teal-subtle {
+  background-color: #f0fdfa !important;
+  color: var(--color-teal) !important;
+}
+
+.border-teal {
+  border-color: var(--color-teal) !important;
+}
+
+.btn-teal {
+  background-color: var(--color-teal);
+  color: #ffffff;
+  border-color: var(--color-teal);
+}
+
+.btn-teal:hover, .btn-teal:focus {
+  background-color: var(--color-teal-dark);
+  color: #ffffff;
+  border-color: var(--color-teal-dark);
+}
+
+.btn-outline-teal {
+  color: var(--color-teal);
+  border-color: var(--color-teal);
+}
+
+.btn-outline-teal:hover, .btn-outline-teal:focus {
+  background-color: var(--color-teal);
+  color: #ffffff;
+}
+
+.hover-teal:hover {
+  color: var(--color-teal) !important;
+}
+
+/* Tipografía y utilidades */
+.fs-7 { font-size: 0.875rem !important; }
+.fs-8 { font-size: 0.775rem !important; }
+
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* Tarjetas y Estadísticas */
+.card-stat {
+  border-radius: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+.stat-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.hover-shadow {
+  transition: all 0.15s ease;
+  border-radius: 10px;
+}
+
+.hover-shadow:hover {
+  background-color: #f8fafc !important;
+  transform: translateY(-2px);
+  border-color: var(--color-teal) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+/* Animación de alerta para aviso al médico */
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
+.animate-pulse {
+  animation: pulse-border 2s infinite;
+}
+
+.whitespace-pre-line {
+  white-space: pre-line;
+}
+
+/* Adaptación responsiva en tabletas y teléfonos móviles */
+@media (max-width: 991.98px) {
+  .navbar-collapse {
+    padding-top: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .sticky-top {
+    position: static !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .navbar-brand .fs-5 {
+    font-size: 1.05rem !important;
+  }
+  
+  .main-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  
+  .card-stat .stat-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 1.3rem;
+  }
+  
+  .table-responsive {
+    border-radius: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .auth-logo-circle {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .h3 {
+    font-size: 1.25rem !important;
+  }
+
+  .card-header {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+
+/* ====================================================================
+   ESTILOS DE IMPRESIÓN (RECETAS Y FICHAS CLÍNICAS)
+   ==================================================================== */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+  }
+
+  .navbar, footer, .d-print-none, .btn, .btn-group, .alert:not(.alert-receta) {
+    display: none !important;
+  }
+
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .printable-receta {
+    border: 2px solid #000000 !important;
+    padding: 20px !important;
+    margin-top: 15px;
+    border-radius: 4px;
+  }
+
+  .table {
+    border-color: #000000 !important;
+  }
+  
+  .badge {
+    border: 1px solid #000000 !important;
+    color: #000000 !important;
+    background-color: transparent !important;
+  }
+}
+

@@ -1,0 +1,478 @@
+<%- include('../partials/header') %>
+
+<!-- Encabezado de la Consulta Médica -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-3 p-lg-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+      <div>
+        <span class="badge bg-teal text-white mb-1"><i class="bi bi-heart-pulse me-1"></i>En Consulta Médica</span>
+        <h2 class="h4 fw-bold text-dark mb-0"><%= paciente.nombre %> <%= paciente.apellido %></h2>
+        <div class="fs-7 text-muted mt-1">
+          <strong>Identificación:</strong> <%= paciente.identificacion %> &bull; 
+          <strong>Edad/Nacimiento:</strong> <%= formatoFecha(paciente.fecha_nacimiento) %> &bull; 
+          <strong>Género:</strong> <%= paciente.genero %> &bull;
+          <strong>ARS:</strong> <%= paciente.ars_nombre || 'Particular / Sin ARS' %>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/pacientes/<%= paciente.id %>" target="_blank" class="btn btn-outline-teal btn-sm fw-semibold">
+          <i class="bi bi-box-arrow-up-right me-1"></i> Abrir Historial en Otra Pestaña
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Antecedentes Médicos del Paciente (Para revisión médica inmediata) -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3 border-0">
+    <h5 class="fw-bold mb-0 text-dark">
+      <i class="bi bi-file-earmark-medical text-teal me-2"></i>1. Revisión de Antecedentes del Paciente
+    </h5>
+  </div>
+  <div class="card-body p-3 p-lg-4 pt-0">
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <div class="p-3 rounded-3 bg-danger-subtle border border-danger">
+          <h6 class="fw-bold text-danger mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Alergias Conocidas</h6>
+          <div class="fs-7 <%= paciente.antecedentes_alergicos ? 'fw-bold text-dark' : 'text-muted fst-italic' %>">
+            <%= paciente.antecedentes_alergicos || 'Sin antecedentes alérgicos reportados' %>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="p-3 rounded-3 bg-light border">
+          <h6 class="fw-bold text-secondary mb-1"><i class="bi bi-heart-pulse me-1"></i>Antecedentes Patológicos</h6>
+          <div class="fs-7 text-dark">
+            <%= paciente.antecedentes_personales || 'Sin antecedentes reportados' %>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="p-3 rounded-3 bg-light border">
+          <h6 class="fw-bold text-secondary mb-1"><i class="bi bi-people me-1"></i>Antecedentes Familiares</h6>
+          <div class="fs-7 text-dark">
+            <%= paciente.antecedentes_familiares || 'Sin antecedentes reportados' %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<form action="/consultas" method="POST" id="formConsulta" class="needs-validation">
+  <input type="hidden" name="paciente_id" value="<%= paciente.id %>">
+  <input type="hidden" name="cita_id" value="<%= cita ? cita.id : '' %>">
+
+  <!-- 2. Motivo y Signos Vitales -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-0">
+      <h5 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-activity text-teal me-2"></i>2. Motivo de Consulta y Signos Vitales
+      </h5>
+    </div>
+    <div class="card-body p-3 p-lg-4 pt-0">
+      <div class="row g-3">
+        <div class="col-12">
+          <label for="motivo_consulta" class="form-label fw-semibold fs-7">Motivo de Consulta Principal <span class="text-danger">*</span></label>
+          <input type="text" name="motivo_consulta" id="motivo_consulta" class="form-control"
+                 value="<%= cita ? cita.motivo : '' %>"
+                 placeholder="Ej: Cefalea de 3 días de evolución, malestar general, dolor de garganta..." required>
+        </div>
+
+        <div class="col-6 col-md-4 col-lg-2">
+          <label for="pa_sistolica" class="form-label fs-8 text-secondary fw-semibold">P.A. Sistólica (mmHg)</label>
+          <input type="number" name="pa_sistolica" id="pa_sistolica" class="form-control form-control-sm" placeholder="120">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label for="pa_diastolica" class="form-label fs-8 text-secondary fw-semibold">P.A. Diastólica (mmHg)</label>
+          <input type="number" name="pa_diastolica" id="pa_diastolica" class="form-control form-control-sm" placeholder="80">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label for="temperatura" class="form-label fs-8 text-secondary fw-semibold">Temperatura (°C)</label>
+          <input type="text" name="temperatura" id="temperatura" class="form-control form-control-sm" placeholder="36.5">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label for="frecuencia_cardiaca" class="form-label fs-8 text-secondary fw-semibold">Pulso / F.C. (lpm)</label>
+          <input type="number" name="frecuencia_cardiaca" id="frecuencia_cardiaca" class="form-control form-control-sm" placeholder="75">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label for="frecuencia_respiratoria" class="form-label fs-8 text-secondary fw-semibold">F. Resp. (rpm)</label>
+          <input type="number" name="frecuencia_respiratoria" id="frecuencia_respiratoria" class="form-control form-control-sm" placeholder="18">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label for="peso" class="form-label fs-8 text-secondary fw-semibold">Peso (kg)</label>
+          <input type="text" name="peso" id="peso" class="form-control form-control-sm" placeholder="70.5">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Examen Físico, Diagnóstico y Tratamiento -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-0">
+      <h5 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-file-medical text-teal me-2"></i>3. Hallazgos Clínicos, Diagnóstico y Tratamiento
+      </h5>
+    </div>
+    <div class="card-body p-3 p-lg-4 pt-0">
+      <div class="row g-3">
+        <div class="col-12">
+          <label for="hallazgos_clinicos" class="form-label fw-semibold fs-7">Hallazgos Clínicos y Examen Físico <span class="text-danger">*</span></label>
+          <textarea name="hallazgos_clinicos" id="hallazgos_clinicos" rows="3" class="form-control" placeholder="Describa el estado general del paciente, auscultación cardiopulmonar, abdomen, orofaringe u otros hallazgos..." required></textarea>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label for="diagnostico_clinico" class="form-label fw-semibold fs-7">Diagnóstico Clínico (Principal / Presuntivo) <span class="text-danger">*</span></label>
+          <textarea name="diagnostico_clinico" id="diagnostico_clinico" rows="3" class="form-control" placeholder="Ej: Faringoamigdalitis aguda bacteriana / Hipertensión arterial estadio 1..." required></textarea>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label for="tratamiento_plan" class="form-label fw-semibold fs-7">Plan Terapéutico y Manejo Clínico <span class="text-danger">*</span></label>
+          <textarea name="tratamiento_plan" id="tratamiento_plan" rows="3" class="form-control" placeholder="Recomendaciones generales, dieta, reposo, signos de alarma y conducta médica..." required></textarea>
+        </div>
+
+        <div class="col-12">
+          <label for="antecedentes_revisados" class="form-label fw-semibold fs-7">Evolución / Observaciones de Antecedentes</label>
+          <input type="text" name="antecedentes_revisados" id="antecedentes_revisados" class="form-control" placeholder="Ej: Se corrobora antecedente alérgico; paciente tolera medicación indicada...">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Receta Médica y Prescripción de Medicamentos -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+      <h5 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-capsule text-teal me-2"></i>4. Prescripción de Receta Médica
+      </h5>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="toggleReceta" name="incluye_receta" value="true" checked onchange="toggleSeccionReceta(this)">
+        <label class="form-check-label fw-semibold fs-7" for="toggleReceta">Emitir Receta</label>
+      </div>
+    </div>
+    <div class="card-body p-3 p-lg-4 pt-0" id="contenedorReceta">
+      <p class="text-secondary fs-8 mb-3">
+        Seleccione medicamentos del inventario de farmacia o ingrese medicamentos particulares con sus indicaciones claras de uso.
+      </p>
+
+      <div class="table-responsive mb-3">
+        <table class="table table-bordered align-middle" id="tablaMedicamentos">
+          <thead class="table-light fs-8 text-uppercase">
+            <tr>
+              <th style="width: 28%;">Medicamento</th>
+              <th style="width: 18%;">Dosis</th>
+              <th style="width: 20%;">Frecuencia / Duración</th>
+              <th style="width: 24%;">Indicaciones de Uso</th>
+              <th style="width: 6%;">Cant.</th>
+              <th style="width: 4%;"></th>
+            </tr>
+          </thead>
+          <tbody id="listaMedFilas">
+            <!-- Fila Inicial -->
+            <tr>
+              <td>
+                <select name="med_id" class="form-select form-select-sm mb-1 med-select" onchange="seleccionarMedicamentoCatalogo(this)">
+                  <option value="">Seleccione de farmacia interna...</option>
+                  <% if (medicamentos && medicamentos.length > 0) { %>
+                    <% medicamentos.forEach(function(m) { %>
+                      <% const estaDisponible = (m.stock_actual > 0); %>
+                      <option value="<%= m.id %>" data-nombre="<%= m.nombre %>" data-conc="<%= m.concentracion %>" data-disponible="<%= estaDisponible ? 'Disponible' : 'No disponible' %>">
+                        <%= m.nombre %> (<%= m.presentacion %>) &mdash; <%= estaDisponible ? 'Disponible' : 'No disponible' %>
+                      </option>
+                    <% }); %>
+                  <% } %>
+                </select>
+                <div class="d-flex align-items-center gap-1">
+                  <input type="text" name="med_nombre" class="form-control form-control-sm med-nombre" placeholder="O nombre del medicamento..." required>
+                  <span class="badge med-disponibilidad d-none" style="white-space: nowrap;"></span>
+                </div>
+              </td>
+              <td>
+                <input type="text" name="med_dosis" class="form-control form-control-sm med-dosis" placeholder="Ej: 500 mg" required>
+              </td>
+              <td>
+                <input type="text" name="med_frecuencia" class="form-control form-control-sm" placeholder="Ej: Cada 8 horas x 7 días" required>
+              </td>
+              <td>
+                <input type="text" name="med_indicaciones" class="form-control form-control-sm" placeholder="Ej: Tomar con alimentos y abundante agua" required>
+              </td>
+              <td>
+                <input type="number" name="med_cantidad" class="form-control form-control-sm" value="1" min="1" required>
+              </td>
+              <td class="text-center">
+                <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="eliminarFilaMed(this)" title="Quitar">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center">
+        <button type="button" class="btn btn-sm btn-outline-teal" onclick="agregarFilaMedicamento()">
+          <i class="bi bi-plus-circle me-1"></i> Agregar Otro Medicamento
+        </button>
+      </div>
+
+      <div class="mt-3">
+        <label for="indicaciones_generales" class="form-label fs-8 fw-semibold text-secondary">Indicaciones Generales de la Receta (Impresas en el encabezado)</label>
+        <input type="text" name="indicaciones_generales" id="indicaciones_generales" class="form-control form-control-sm" placeholder="Ej: Mantener reposo relativo; acudir a emergencias si presenta fiebre mayor a 39°C...">
+      </div>
+    </div>
+  </div>
+
+  <% const esPerfilMedico = usuarioActual && usuarioActual.rol === 'MEDICO'; %>
+
+  <% if (!esPerfilMedico) { %>
+    <!-- 5. Cobertura de ARS, Tarifario y Cobros (Oculto para el perfil del Médico; gestionado en Secretaría) -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 border-0">
+        <h5 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-shield-check text-teal me-2"></i>5. Liquidación, Cobertura ARS y Cobro al Paciente
+        </h5>
+      </div>
+      <div class="card-body p-3 p-lg-4 pt-0">
+        <p class="text-secondary fs-8 mb-3">
+          El cálculo se realiza automáticamente según las tarifas pactadas y porcentajes configurados en el sistema para la ARS correspondiente.
+        </p>
+
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <label for="servicio_id" class="form-label fw-semibold fs-7">Servicio Prestado <span class="text-danger">*</span></label>
+            <select name="servicio_id" id="servicio_id" class="form-select" onchange="recalcularCobro()" required>
+              <% if (servicios && servicios.length > 0) { %>
+                <% servicios.forEach(function(s) { %>
+                  <option value="<%= s.id %>" data-precio="<%= s.precio_base %>"
+                    <%= (cita && cita.servicio_id == s.id) || s.codigo === 'MED-GEN' ? 'selected' : '' %>>
+                    <%= s.nombre %> &mdash; Base: <%= formatoMoneda(s.precio_base) %>
+                  </option>
+                <% }); %>
+              <% } %>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label for="ars_id" class="form-label fw-semibold fs-7">ARS / Aseguradora <span class="text-danger">*</span></label>
+            <select name="ars_id" id="ars_id" class="form-select" onchange="recalcularCobro()" required>
+              <option value="0" data-tipo="PARTICULAR">Particular / Sin Aseguradora</option>
+              <% if (arsList && arsList.length > 0) { %>
+                <% arsList.forEach(function(ars) { %>
+                  <option value="<%= ars.id %>" <%= paciente.ars_id == ars.id ? 'selected' : '' %>>
+                    <%= ars.nombre %>
+                  </option>
+                <% }); %>
+              <% } %>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label for="estado_pago" class="form-label fw-semibold fs-7">Estado del Cobro</label>
+            <select name="estado_pago" id="estado_pago" class="form-select">
+              <option value="Pendiente">Pendiente de cobro en caja</option>
+              <option value="Pagado">Cobrado / Pagado por paciente</option>
+              <option value="Exonerado">Exonerado</option>
+            </select>
+          </div>
+
+          <!-- Tarjetas del Desglose de Valores -->
+          <div class="col-12 col-md-4">
+            <div class="p-3 rounded-3 bg-light border text-center">
+              <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Valor Total del Servicio</span>
+              <div class="fs-4 fw-bold text-dark my-1" id="displayValorTotal">RD$ 0.00</div>
+              <input type="hidden" name="valor_total" id="valor_total" value="0.00">
+              <small class="text-muted fs-8" id="detalleTarifa">Tarifa pactada</small>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="p-3 rounded-3 bg-teal-subtle border border-teal text-center">
+              <span class="fs-8 text-teal text-uppercase fw-semibold d-block">Monto Cubierto por ARS</span>
+              <div class="fs-4 fw-bold text-teal my-1" id="displayValorCubierto">RD$ 0.00</div>
+              <input type="hidden" name="valor_cubierto_ars" id="valor_cubierto_ars" value="0.00">
+              <small class="text-secondary fs-8" id="detalleCobertura">Regla de aseguradora</small>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="p-3 rounded-3 bg-warning-subtle border border-warning text-center">
+              <span class="fs-8 text-dark text-uppercase fw-semibold d-block">Diferencia / Copago Paciente</span>
+              <div class="fs-4 fw-bold text-danger my-1" id="displayDiferenciaPaciente">RD$ 0.00</div>
+              <input type="hidden" name="diferencia_paciente" id="diferencia_paciente" value="0.00">
+              <small class="text-secondary fs-8" id="detalleCopago">Monto a cancelar en caja</small>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  <% } else { %>
+    <!-- Sección de Cobro Oculta para el Médico: La atención se registra clínicamente y el cobro se envía a Secretaría -->
+    <div class="alert alert-light border shadow-sm mb-4 p-3 fs-8 text-secondary">
+      <i class="bi bi-info-circle-fill text-teal me-1"></i>
+      <strong>Flujo Clínico Desacoplado de Cobros:</strong> El médico atiende la consulta y prescribe medicamentos. Al guardar, el cargo de la consulta se creará automáticamente como <strong>Pendiente de Cobro</strong> en el panel de Secretaría para su revisión, liquidación con ARS y cobro al paciente.
+    </div>
+  <% } %>
+
+  <div class="d-flex justify-content-end gap-2 mb-5">
+    <a href="/citas/sala-espera" class="btn btn-outline-secondary px-4">Cancelar</a>
+    <button type="submit" class="btn btn-success fw-bold px-5 shadow-sm">
+      <i class="bi bi-check2-circle me-1"></i> <%= esPerfilMedico ? 'Guardar Atención Médica y Receta' : 'Guardar Atención, Receta y Cobro' %>
+    </button>
+  </div>
+</form>
+
+<script>
+<% if (!esPerfilMedico) { %>
+// Tarifarios cargados desde la base de datos
+const tarifariosConfigurados = <%- JSON.stringify(tarifarios || []) %>;
+<% } %>
+
+function seleccionarMedicamentoCatalogo(select) {
+  const fila = select.closest('tr');
+  const opt = select.options[select.selectedIndex];
+  const nombreInput = fila.querySelector('.med-nombre');
+  const dosisInput = fila.querySelector('.med-dosis');
+  const badgeDisp = fila.querySelector('.med-disponibilidad');
+
+  if (opt && opt.value !== '') {
+    nombreInput.value = opt.getAttribute('data-nombre');
+    dosisInput.value = opt.getAttribute('data-conc') || '';
+    if (badgeDisp) {
+      const estado = opt.getAttribute('data-disponible');
+      if (estado === 'Disponible') {
+        badgeDisp.className = 'badge bg-success med-disponibilidad';
+        badgeDisp.innerHTML = '<i class="bi bi-check-circle me-1"></i>Disponible';
+      } else {
+        badgeDisp.className = 'badge bg-secondary med-disponibilidad';
+        badgeDisp.innerHTML = '<i class="bi bi-x-circle me-1"></i>No disponible';
+      }
+      badgeDisp.classList.remove('d-none');
+    }
+  } else {
+    if (badgeDisp) {
+      badgeDisp.classList.add('d-none');
+      badgeDisp.innerHTML = '';
+    }
+  }
+}
+
+function agregarFilaMedicamento() {
+  const tbody = document.getElementById('listaMedFilas');
+  const primeraFila = tbody.querySelector('tr');
+  const nuevaFila = primeraFila.cloneNode(true);
+
+  nuevaFila.querySelectorAll('input').forEach(input => {
+    if (input.name === 'med_cantidad') {
+      input.value = '1';
+    } else {
+      input.value = '';
+    }
+  });
+
+  const badgeDisp = nuevaFila.querySelector('.med-disponibilidad');
+  if (badgeDisp) {
+    badgeDisp.classList.add('d-none');
+    badgeDisp.innerHTML = '';
+  }
+
+  nuevaFila.querySelector('.med-select').selectedIndex = 0;
+  tbody.appendChild(nuevaFila);
+}
+
+function eliminarFilaMed(btn) {
+  const tbody = document.getElementById('listaMedFilas');
+  if (tbody.querySelectorAll('tr').length > 1) {
+    btn.closest('tr').remove();
+  } else {
+    alert('Debe mantener al menos una fila o desmarcar la casilla de emitir receta.');
+  }
+}
+
+function toggleSeccionReceta(checkbox) {
+  const cont = document.getElementById('contenedorReceta');
+  cont.style.display = checkbox.checked ? 'block' : 'none';
+  const inputs = cont.querySelectorAll('input');
+  inputs.forEach(i => i.required = checkbox.checked);
+}
+
+<% if (!esPerfilMedico) { %>
+// Cálculo dinámico de cobro y cobertura ARS
+function recalcularCobro() {
+  const servicioSelect = document.getElementById('servicio_id');
+  const arsSelect = document.getElementById('ars_id');
+  if (!servicioSelect || !arsSelect) return;
+
+  const servicioId = parseInt(servicioSelect.value, 10);
+  const arsId = parseInt(arsSelect.value, 10);
+
+  const optServicio = servicioSelect.options[servicioSelect.selectedIndex];
+  const precioBase = parseFloat(optServicio.getAttribute('data-precio')) || 0;
+
+  let valorTotal = precioBase;
+  let valorCubierto = 0;
+  let copago = 0;
+  let reglaTexto = 'Tarifa base particular';
+
+  // Buscar si existe tarifario configurado para esta ARS y este servicio
+  const tarifaMatch = tarifariosConfigurados.find(t => t.ars_id === arsId && t.servicio_id === servicioId);
+
+  if (tarifaMatch) {
+    valorTotal = parseFloat(tarifaMatch.tarifa_pactada);
+    const valorCob = parseFloat(tarifaMatch.valor_cobertura);
+    const copagoFijo = parseFloat(tarifaMatch.copago_fijo) || 0;
+
+    if (tarifaMatch.tipo_cobertura === 'PORCENTAJE') {
+      valorCubierto = (valorTotal * valorCob) / 100.0;
+      reglaTexto = `${valorCob}% cubierto por ARS`;
+    } else {
+      valorCubierto = Math.min(valorTotal, valorCob);
+      reglaTexto = `Monto fijo cubierto: RD$ ${valorCob.toFixed(2)}`;
+    }
+    copago = Math.max(0, valorTotal - valorCubierto + copagoFijo);
+  } else {
+    copago = valorTotal;
+  }
+
+  // Actualizar DOM
+  document.getElementById('valor_total').value = valorTotal.toFixed(2);
+  document.getElementById('valor_cubierto_ars').value = valorCubierto.toFixed(2);
+  document.getElementById('diferencia_paciente').value = copago.toFixed(2);
+
+  document.getElementById('displayValorTotal').innerText = 'RD$ ' + valorTotal.toLocaleString('es-DO', {minimumFractionDigits: 2});
+  document.getElementById('displayValorCubierto').innerText = 'RD$ ' + valorCubierto.toLocaleString('es-DO', {minimumFractionDigits: 2});
+  document.getElementById('displayDiferenciaPaciente').innerText = 'RD$ ' + copago.toLocaleString('es-DO', {minimumFractionDigits: 2});
+
+  document.getElementById('detalleCobertura').innerText = reglaTexto;
+}
+<% } %>
+
+document.addEventListener('DOMContentLoaded', function() {
+  <% if (!esPerfilMedico) { %>
+    recalcularCobro();
+  <% } %>
+
+  // Prevención de doble clic y envíos duplicados al guardar la consulta
+  const formConsulta = document.getElementById('formConsulta');
+  if (formConsulta) {
+    formConsulta.addEventListener('submit', function(e) {
+      if (formConsulta.dataset.submitting === 'true') {
+        e.preventDefault();
+        return false;
+      }
+      formConsulta.dataset.submitting = 'true';
+      const submitBtn = formConsulta.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        setTimeout(function() {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Guardando Atención...';
+        }, 10);
+      }
+    });
+  }
+});
+</script>
+
+<%- include('../partials/footer') %>
+

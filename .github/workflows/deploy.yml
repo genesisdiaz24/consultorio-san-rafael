@@ -1,0 +1,89 @@
+# CI/CD: GitHub Actions -> Cloud Build -> Cloud Run
+#
+# 1. "verificar": instala dependencias y comprueba que todo el código y las vistas compilan.
+# 2. "desplegar" (solo en la rama main): se autentica en GCP SIN llaves JSON
+#    (Workload Identity Federation) y ejecuta cloudbuild.yaml, que construye la
+#    imagen y la despliega en Cloud Run.
+#
+# Variables requeridas en GitHub (Settings > Secrets and variables > Actions > Variables):
+#   GCP_PROJECT_ID, GCP_WIF_PROVIDER, GCP_DEPLOY_SA
+# Ver DEPLOY.md para crearlas.
+
+name: Desplegar en Cloud Run
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: Verificar código
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobar sintaxis JavaScript
+        run: |
+          for f in $(find src -name '*.js'); do node --check "$f"; done
+
+      - name: Compilar vistas EJS
+        run: |
+          node -e "
+            const ejs = require('ejs'), fs = require('fs'), path = require('path');
+            const walk = (d) => fs.readdirSync(d, { withFileTypes: true })
+              .flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+            const vistas = walk('src/views').filter((f) => f.endsWith('.ejs'));
+            for (const f of vistas) ejs.compile(fs.readFileSync(f, 'utf8'), { filename: f });
+            console.log(vistas.length + ' vistas compiladas correctamente');
+          "
+
+  desplegar:
+    name: Desplegar con Cloud Build
+    needs: verificar
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # necesario para Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticarse en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Construir y desplegar (Cloud Build -> Cloud Run)
+        run: |
+          gcloud builds submit \
+            --config cloudbuild.yaml \
+            --substitutions=_TAG=${GITHUB_SHA::7} \
+            .
+
+      - name: Mostrar URL del servicio
+        run: |
+          URL=$(gcloud run services describe consultorio-san-rafael \
+            --region us-central1 --format='value(status.url)')
+          echo "Aplicación publicada en: $URL"
+          echo "### 🚀 Aplicación publicada: $URL" >> "$GITHUB_STEP_SUMMARY"

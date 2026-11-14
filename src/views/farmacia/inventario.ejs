@@ -1,0 +1,645 @@
+<%- include('../partials/header') %>
+
+
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-boxes text-teal me-2"></i>Inventario de Farmacia Interna
+    </h1>
+    <p class="text-muted mb-0">Control de existencias, lotes, fechas de vencimiento y estimación de demanda con IA.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-teal fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoMedicamento">
+      <i class="bi bi-plus-circle me-1"></i> Nuevo Medicamento
+    </button>
+    <a href="/farmacia/dispensar" class="btn btn-outline-primary fw-semibold">
+      <i class="bi bi-check2-circle me-1"></i> Despachar Recetas
+    </a>
+  </div>
+</div>
+
+<!-- Asistente de IA: Estimación de Demanda y Sugerencias de Reposición (Bajo Demanda) -->
+<div class="card border-0 shadow-sm mb-4" id="panel-ia-farmacia">
+  <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h5 class="fw-bold mb-0 text-dark">
+        <i class="bi bi-robot text-teal me-2"></i>Estimación de Demanda y Sugerencias de Reposición (Asistente IA)
+      </h5>
+      <small class="text-muted fs-8">Proyección de consumo a partir del historial real de recetas entregadas &bull; Modo consultivo</small>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <a href="/farmacia/chat" class="btn btn-outline-teal fw-semibold">
+        <i class="bi bi-chat-dots me-1"></i> Chat Box Asistente IA
+      </a>
+      <button id="btnConsultarIa" type="button" class="btn btn-teal fw-semibold shadow-sm" onclick="consultarIa()">
+        <i class="bi bi-robot me-1"></i> Consultar IA
+      </button>
+      <button id="btnOcultarIa" type="button" class="btn btn-outline-secondary btn-sm fw-semibold d-none" onclick="ocultarResultadosIa()">
+        <i class="bi bi-eye-slash me-1"></i> Ocultar Análisis
+      </button>
+    </div>
+  </div>
+  <div class="card-body p-4">
+    <!-- Estado Inicial: En espera (No ejecutado automáticamente) -->
+    <div id="iaEstadoInicial" class="text-center py-4 px-3 bg-light rounded-3 border">
+      <div class="mb-3">
+        <i class="bi bi-cpu fs-1 text-teal"></i>
+      </div>
+      <h6 class="fw-bold text-dark mb-2">Análisis de IA en espera</h6>
+      <p class="text-muted mb-3 fs-7" id="mensajeGuiaIa">Presiona Consultar IA para generar una estimación de demanda o interactúa directamente con el Chat Box de Farmacia</p>
+      <div class="d-flex justify-content-center gap-2">
+        <button type="button" class="btn btn-outline-teal btn-sm fw-semibold px-3" onclick="consultarIa()">
+          <i class="bi bi-play-circle me-1"></i> Consultar IA
+        </button>
+        <a href="/farmacia/chat" class="btn btn-teal btn-sm fw-semibold px-3 shadow-sm">
+          <i class="bi bi-chat-dots me-1"></i> Escribir en Chat Box IA
+        </a>
+      </div>
+    </div>
+
+    <!-- Estado Cargando: Spinner activo mientras consulta el endpoint -->
+    <div id="iaEstadoCargando" class="d-none text-center py-5">
+      <div class="spinner-border text-teal mb-3" role="status" style="width: 2.5rem; height: 2.5rem;">
+        <span class="visually-hidden">Consultando IA...</span>
+      </div>
+      <h6 class="fw-semibold text-dark mb-1">Consultando datos y calculando estimaciones de IA...</h6>
+      <p class="text-muted fs-8 mb-0">Analizando historial de recetas entregadas, kardex y niveles de rotación en tiempo real.</p>
+    </div>
+
+    <!-- Estado Error: Notificación si falla la petición -->
+    <div id="iaEstadoError" class="d-none alert alert-danger border-0 shadow-sm py-3 px-4">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <span id="mensajeErrorIa">Error al consultar el servicio de IA.</span>
+        </div>
+        <button type="button" class="btn btn-outline-danger btn-sm fw-semibold" onclick="consultarIa()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Reintentar
+        </button>
+      </div>
+    </div>
+
+    <!-- Estado Resultados: Mostrado únicamente tras pulsar el botón -->
+    <div id="iaEstadoResultados" class="d-none">
+      <div class="alert alert-light border border-teal-subtle py-2 px-3 fs-8 mb-3 text-secondary">
+        <i class="bi bi-info-circle-fill text-teal me-1"></i>
+        <strong>Aviso consultivo:</strong> <span id="iaAvisoConsultivoTexto"></span>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-sm-6 col-lg-3">
+          <div class="p-3 rounded-3 bg-light border text-center h-100">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Medicamentos Analizados</span>
+            <span class="fs-3 fw-bold text-dark" id="iaTotalMed">0</span>
+            <small class="text-muted d-block fs-8">Historial: últimos 30 días</small>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <div class="ia-metric-box p-3 rounded-3 bg-light border text-center h-100" id="iaBoxReposicion">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Requieren Reposición</span>
+            <span class="fs-3 fw-bold text-dark" id="iaReqRepo">0</span>
+            <small class="text-muted d-block fs-8">Sugeridas: <strong id="iaTotalUnidadesSugeridas">+0</strong> unid.</small>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <div class="p-3 rounded-3 bg-success-subtle border border-success-subtle text-center h-100">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Estimaciones Confiables</span>
+            <span class="fs-3 fw-bold text-success" id="iaEstimacionesConfiables">0</span>
+            <small class="text-muted d-block fs-8">&ge; 3 despachos históricos</small>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <div class="p-3 rounded-3 bg-secondary-subtle border border-secondary-subtle text-center h-100">
+            <span class="fs-8 text-secondary text-uppercase fw-semibold d-block">Datos Insuficientes</span>
+            <span class="fs-3 fw-bold text-secondary" id="iaDatosInsuficientes">0</span>
+            <small class="text-muted d-block fs-8">&lt; 3 despachos (No confiable)</small>
+          </div>
+        </div>
+      </div>
+
+      <div id="panelDetalleIa">
+        <h6 class="fs-7 fw-bold text-dark mb-2">
+          <i class="bi bi-lightbulb text-warning me-1"></i>Sugerencias de Abastecimiento Calculadas por la IA:
+        </h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 fs-8">
+            <thead class="table-light text-uppercase">
+              <tr>
+                <th>Medicamento</th>
+                <th class="text-center">Stock Actual</th>
+                <th class="text-center">Stock Mínimo</th>
+                <th class="text-center">Despachos Históricos</th>
+                <th class="text-center">Demanda Estimada (30d)</th>
+                <th class="text-center">Días Cobertura</th>
+                <th class="text-center">Sugerencia IA Reposición</th>
+                <th>Fiabilidad de la Estimación</th>
+              </tr>
+            </thead>
+            <tbody id="iaTablaDetalleBody">
+              <!-- Filas generadas dinámicamente al pulsar Consultar IA -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filtros de Inventario -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-3">
+    <form action="/farmacia/inventario" method="GET" class="row g-2 align-items-center">
+      <div class="col-12 col-md-6 col-lg-7">
+        <div class="input-group">
+          <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+          <input type="text" name="q" value="<%= q %>" class="form-control border-start-0" placeholder="Buscar medicamento por nombre, código o principio activo...">
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <select name="estado" class="form-select" onchange="this.form.submit()">
+          <option value="">Todos los estados</option>
+          <option value="bajo" <%= estado === 'bajo' ? 'selected' : '' %>>Stock Bajo (Alerta)</option>
+          <option value="agotado" <%= estado === 'agotado' ? 'selected' : '' %>>Agotados (Stock 0)</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2 col-lg-2 d-grid">
+        <button type="submit" class="btn btn-teal fw-semibold">
+          <i class="bi bi-funnel me-1"></i> Filtrar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Tabla de Inventario -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light fs-8 text-uppercase">
+          <tr>
+            <th>Código</th>
+            <th>Medicamento &amp; Concentración</th>
+            <th>Presentación</th>
+            <th class="text-center">Existencias</th>
+            <th class="text-center">Sugerencia IA</th>
+            <th>Lote / Vencimiento</th>
+            <th>Ubicación</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (medicamentos && medicamentos.length > 0) { %>
+            <% medicamentos.forEach(function(m) { %>
+              <tr>
+                <td>
+                  <span class="badge bg-light text-dark border font-monospace fs-8">
+                    <%= m.codigo %>
+                  </span>
+                </td>
+                <td>
+                  <strong class="text-dark d-block"><%= m.nombre %></strong>
+                  <small class="text-muted"><%= m.principio_activo || '' %> &bull; <%= m.concentracion || '' %></small>
+                </td>
+                <td>
+                  <span class="badge bg-light text-dark border"><%= m.presentacion %></span>
+                </td>
+                <td class="text-center">
+                  <% if (m.stock_actual <= 0) { %>
+                    <span class="badge bg-danger py-2 px-3 fs-7">
+                      <i class="bi bi-x-circle me-1"></i> Agotado (0)
+                    </span>
+                  <% } else if (m.stock_actual <= m.stock_minimo) { %>
+                    <span class="badge bg-warning text-dark py-2 px-3 fs-7">
+                      <i class="bi bi-exclamation-triangle me-1"></i> <%= m.stock_actual %> unid. (Bajo)
+                    </span>
+                  <% } else { %>
+                    <span class="badge bg-success-subtle text-success border border-success py-2 px-3 fs-7 fw-bold">
+                      <i class="bi bi-check-circle me-1"></i> <%= m.stock_actual %> unid.
+                    </span>
+                  <% } %>
+                </td>
+                <td class="text-center celda-sugerencia-ia" id="sug-ia-<%= m.id %>" data-med-id="<%= m.id %>">
+                  <span class="text-muted fs-8" title="Presiona 'Consultar IA' para calcular estimación"><i class="bi bi-dash"></i></span>
+                </td>
+                <td>
+                  <div class="fs-8">Lote: <strong><%= m.lote || 'N/A' %></strong></div>
+                  <small class="text-muted">Vence: <%= formatoFecha(m.fecha_vencimiento) %></small>
+                </td>
+                <td>
+                  <small class="text-secondary"><i class="bi bi-geo-alt me-1"></i><%= m.ubicacion || 'General' %></small>
+                </td>
+                <td class="text-end">
+                  <button type="button" class="btn btn-sm btn-outline-teal" data-id="<%= m.id %>" data-nombre="<%= m.nombre %>" data-stock="<%= m.stock_actual %>" onclick="abrirModalAjustar(this.dataset.id, this.dataset.nombre, this.dataset.stock)">
+                    <i class="bi bi-plus-slash-minus me-1"></i> Ajustar Stock
+                  </button>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+            <tr>
+              <td colspan="8" class="text-center py-5 text-muted">
+                <i class="bi bi-capsule fs-1 d-block mb-2 text-teal-light"></i>
+                <h6 class="fw-bold text-dark">No hay medicamentos encontrados</h6>
+                <p class="mb-3">Agregue medicamentos al catálogo para comenzar la gestión de stock.</p>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Registrar Nuevo Medicamento -->
+<div class="modal fade" id="modalNuevoMedicamento" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form action="/farmacia/inventario" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="modal-header bg-teal text-white">
+          <h5 class="modal-title fw-bold"><i class="bi bi-capsule me-2"></i>Registrar Medicamento en Farmacia</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Código Interno <span class="text-danger">*</span></label>
+              <input type="text" name="codigo" class="form-control" placeholder="Ej: MED-010" required>
+            </div>
+            <div class="col-12 col-md-8">
+              <label class="form-label fs-7 fw-semibold">Nombre Comercial <span class="text-danger">*</span></label>
+              <input type="text" name="nombre" class="form-control" placeholder="Ej: Ibuprofeno Forte" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fs-7 fw-semibold">Principio Activo</label>
+              <input type="text" name="principio_activo" class="form-control" placeholder="Ej: Ibuprofeno">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fs-7 fw-semibold">Concentración</label>
+              <input type="text" name="concentracion" class="form-control" placeholder="Ej: 600 mg">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Presentación <span class="text-danger">*</span></label>
+              <select name="presentacion" class="form-select" required>
+                <option value="Tabletas">Tabletas</option>
+                <option value="Cápsulas">Cápsulas</option>
+                <option value="Jarabe">Jarabe</option>
+                <option value="Ampollas">Ampollas</option>
+                <option value="Suspensión">Suspensión</option>
+                <option value="Gotas">Gotas</option>
+                <option value="Crema / Ungüento">Crema / Ungüento</option>
+                <option value="Inhalador">Inhalador</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Stock Inicial</label>
+              <input type="number" name="stock_actual" class="form-control" value="0" min="0">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Stock Mínimo Alerta</label>
+              <input type="number" name="stock_minimo" class="form-control" value="5" min="1">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Lote</label>
+              <input type="text" name="lote" class="form-control" placeholder="LOT-2026-X">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Fecha de Vencimiento</label>
+              <input type="date" name="fecha_vencimiento" class="form-control">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fs-7 fw-semibold">Ubicación / Estante</label>
+              <input type="text" name="ubicacion" class="form-control" placeholder="Estante B-2">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-teal fw-semibold">Guardar Medicamento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajustar Stock -->
+<div class="modal fade" id="modalAjustarStock" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="formAjustarStock" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="modal-header bg-teal text-white">
+          <h5 class="modal-title fw-bold"><i class="bi bi-box-arrow-in-down me-2"></i>Reabastecer Medicamento</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label text-muted fs-8 text-uppercase fw-semibold">Medicamento</label>
+            <div class="fw-bold fs-6 text-dark" id="modalMedNombre"></div>
+            <small class="text-secondary" id="modalMedStockActual"></small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold fs-7">Cantidad de unidades a agregar <span class="text-danger">*</span></label>
+            <input type="number" name="cantidad_agregar" class="form-control" min="1" placeholder="Ej: 50" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold fs-7">Motivo del ajuste</label>
+            <input type="text" name="motivo" class="form-control" placeholder="Ej: Compra de lote nuevo / donación de laboratorio...">
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-teal fw-semibold">Actualizar Existencias</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirModalAjustar(id, nombre, stock) {
+  document.getElementById('formAjustarStock').action = `/farmacia/inventario/${id}/ajustar`;
+  document.getElementById('modalMedNombre').innerText = nombre;
+  document.getElementById('modalMedStockActual').innerText = `Stock actual disponible: ${stock} unidades`;
+  const modal = new bootstrap.Modal(document.getElementById('modalAjustarStock'));
+  modal.show();
+}
+
+/**
+ * Consulta de IA bajo demanda para Inventario de Farmacia
+ * Consultorio Médico San Rafael
+ * 
+ * Reglas estrictas:
+ * 1. NO se ejecuta automáticamente al cargar la página ni al iniciar sesión.
+ * 2. Solo se ejecuta cuando el usuario presiona explícitamente "Consultar IA".
+ * 3. Si no hay suficientes despachos históricos (< 3), lo indica claramente y NO presenta la predicción como confiable.
+ * 4. Evita que la consulta se repita automáticamente al recargar, volver atrás o cambiar de sección.
+ */
+async function consultarIa() {
+  const btn = document.getElementById('btnConsultarIa');
+  const btnOcultar = document.getElementById('btnOcultarIa');
+  const estadoInicial = document.getElementById('iaEstadoInicial');
+  const estadoCargando = document.getElementById('iaEstadoCargando');
+  const estadoResultados = document.getElementById('iaEstadoResultados');
+  const estadoError = document.getElementById('iaEstadoError');
+
+  if (!btn) return;
+
+  // Actualizar estado visual a "Cargando..."
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Consultando IA...';
+  if (estadoInicial) estadoInicial.classList.add('d-none');
+  if (estadoError) estadoError.classList.add('d-none');
+  if (estadoResultados) estadoResultados.classList.add('d-none');
+  if (estadoCargando) estadoCargando.classList.remove('d-none');
+
+  try {
+    const response = await fetch('/farmacia/inventario/ia-estimaciones?dias=30', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+      cache: 'no-store', // Evitar respuestas cacheadas por el navegador
+    });
+
+    if (!response.ok) {
+      throw new Error(`El servidor respondió con código ${response.status} al consultar el servicio de IA.`);
+    }
+
+    const data = await response.json();
+    if (!data || !data.success) {
+      throw new Error(data?.error || 'No se pudo obtener la estimación de demanda de la IA.');
+    }
+
+    // Renderizar resultados en el panel
+    renderizarResultadosIa(data);
+
+    // Actualizar visibilidad de estados
+    if (estadoCargando) estadoCargando.classList.add('d-none');
+    if (estadoResultados) estadoResultados.classList.remove('d-none');
+    if (btnOcultar) btnOcultar.classList.remove('d-none');
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Actualizar Análisis';
+  } catch (err) {
+    console.error('[IA Farmacia Error]:', err);
+    if (estadoCargando) estadoCargando.classList.add('d-none');
+    if (estadoError) {
+      estadoError.classList.remove('d-none');
+      const msgElem = document.getElementById('mensajeErrorIa');
+      if (msgElem) msgElem.textContent = err.message || 'Error al consultar la estimación de IA.';
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-robot me-1"></i> Consultar IA';
+  }
+}
+
+function renderizarResultadosIa(data) {
+  // 1. Aviso consultivo
+  const avisoElem = document.getElementById('iaAvisoConsultivoTexto');
+  if (avisoElem) avisoElem.textContent = data.avisoConsultivo || 'La IA proporciona estimaciones de demanda en modo consultivo.';
+
+  // 2. Tarjetas de resumen métrico
+  const resumen = data.resumen || {};
+  const totalMedElem = document.getElementById('iaTotalMed');
+  if (totalMedElem) totalMedElem.textContent = resumen.totalMedicamentos || 0;
+
+  const reqRepoElem = document.getElementById('iaReqRepo');
+  if (reqRepoElem) {
+    reqRepoElem.textContent = resumen.requierenReposicion || 0;
+    const box = document.getElementById('iaBoxReposicion');
+    if (box) {
+      if (resumen.requierenReposicion > 0) {
+        box.className = 'ia-metric-box p-3 rounded-3 bg-warning-subtle border border-warning text-center h-100';
+        reqRepoElem.className = 'fs-3 fw-bold text-dark';
+      } else {
+        box.className = 'ia-metric-box p-3 rounded-3 bg-light border text-center h-100';
+        reqRepoElem.className = 'fs-3 fw-bold text-success';
+      }
+    }
+  }
+
+  const unidRepoElem = document.getElementById('iaTotalUnidadesSugeridas');
+  if (unidRepoElem) unidRepoElem.textContent = `+${resumen.totalUnidadesSugeridas || 0}`;
+
+  const confElem = document.getElementById('iaEstimacionesConfiables');
+  if (confElem) confElem.textContent = resumen.datosSuficientes || 0;
+
+  const insufElem = document.getElementById('iaDatosInsuficientes');
+  if (insufElem) insufElem.textContent = resumen.datosInsuficientes || 0;
+
+  // 3. Tabla detallada de estimaciones
+  const tbody = document.getElementById('iaTablaDetalleBody');
+  if (tbody && Array.isArray(data.estimaciones)) {
+    tbody.innerHTML = '';
+    data.estimaciones.forEach(item => {
+      const med = item.medicamento || {};
+      const est = item.estimacion || {};
+      const hist = item.historial || {};
+      const stockActual = Number(item.stockActual);
+      const stockMinimo = Number(item.stockMinimo);
+
+      const tr = document.createElement('tr');
+      if (est.prioridad === 'URGENTE') tr.className = 'table-danger';
+      else if (est.prioridad === 'CRITICA') tr.className = 'table-warning';
+
+      // Badge de stock
+      let stockBadgeClass = 'bg-success';
+      if (stockActual <= 0) stockBadgeClass = 'bg-danger';
+      else if (stockActual <= stockMinimo) stockBadgeClass = 'bg-warning text-dark';
+
+      // Badge de días de cobertura
+      let diasCoberturaHtml = '';
+      if (stockActual <= 0) {
+        diasCoberturaHtml = '<span class="badge bg-danger">0 días (Agotado)</span>';
+      } else if (est.diasCobertura !== null && est.diasCobertura !== undefined) {
+        const cobBadge = est.diasCobertura <= 7 ? 'bg-danger text-white' : (est.diasCobertura <= 15 ? 'bg-warning text-dark' : 'bg-success');
+        diasCoberturaHtml = `<span class="badge ${cobBadge}">${est.diasCobertura} días</span>`;
+      } else {
+        diasCoberturaHtml = '<span class="text-muted fs-8">Sin rotación reciente</span>';
+      }
+
+      // Demanda estimada: Si datosSuficientes es falso, NO presentar como confiable
+      let demandaHtml = '';
+      if (est.datosSuficientes) {
+        demandaHtml = `<strong class="text-primary">~${est.demandaProyectada30d} unid./mes</strong><small class="d-block text-muted">(~${est.demandaDiaria} unid./día)</small>`;
+      } else {
+        demandaHtml = `
+          <span class="badge bg-secondary-subtle text-secondary border border-secondary mb-1">
+            <i class="bi bi-slash-circle me-1"></i>No confiable
+          </span>
+          <small class="d-block text-muted fs-8">Falta historial (< 3 despachos)</small>
+        `;
+      }
+
+      // Sugerencia de reposición
+      let sugerenciaHtml = '';
+      if (est.cantidadSugerida > 0) {
+        sugerenciaHtml = `<span class="badge bg-primary fs-7"><i class="bi bi-cart-plus me-1"></i>Sugerido: +${est.cantidadSugerida} unid.</span>`;
+      } else {
+        sugerenciaHtml = `<span class="text-success fs-8 fw-semibold"><i class="bi bi-check2 me-1"></i>Stock suficiente</span>`;
+      }
+      if (est.motivoReposicion) {
+        sugerenciaHtml += `<small class="d-block text-secondary fs-9 mt-1 text-center">${escapeHtml(est.motivoReposicion)}</small>`;
+      }
+      if (est.proximoAgotamiento) {
+        sugerenciaHtml += `<span class="badge bg-danger-subtle text-danger border border-danger fs-9 mt-1 d-inline-block"><i class="bi bi-clock-history me-1"></i>Agotamiento Próximo</span>`;
+      }
+      if (est.proximoAVencer) {
+        sugerenciaHtml += `<span class="badge bg-warning-subtle text-dark border border-warning fs-9 mt-1 d-inline-block"><i class="bi bi-calendar-x me-1"></i>${est.loteVencido ? 'Lote Vencido' : 'Vence en ' + est.diasHastaVencimiento + 'd'}</span>`;
+      }
+
+      // Fiabilidad de la estimación (CLAVE: Distinguir estimación confiable vs datos insuficientes)
+      let fiabilidadHtml = '';
+      if (est.datosSuficientes) {
+        fiabilidadHtml = `
+          <span class="badge bg-success-subtle text-success border border-success mb-1">
+            <i class="bi bi-stars me-1"></i>Estimación Confiable (${escapeHtml(est.nivelConfianza)})
+          </span>
+        `;
+      } else {
+        fiabilidadHtml = `
+          <span class="badge bg-warning text-dark border border-warning mb-1">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>Datos Insuficientes &bull; No Confiable
+          </span>
+          <small class="text-danger-emphasis d-block fs-8 fw-semibold mt-1">
+            ${escapeHtml(est.motivoInsuficiencia || 'Se requieren al menos 3 despachos históricos para una proyección confiable.')}
+          </small>
+        `;
+      }
+
+      tr.innerHTML = `
+        <td>
+          <strong class="text-dark">${escapeHtml(med.nombre || '')}</strong>
+          <span class="font-monospace text-muted fs-8">(${escapeHtml(med.codigo || '')})</span>
+          <small class="d-block text-muted">${escapeHtml(med.principioActivo || '')} ${escapeHtml(med.concentracion || '')}</small>
+        </td>
+        <td class="text-center fw-bold">
+          <span class="badge ${stockBadgeClass}">
+            ${stockActual} unid.
+          </span>
+        </td>
+        <td class="text-center text-muted">${stockMinimo} unid.</td>
+        <td class="text-center">
+          <strong>${hist.totalUnidadesDespachadas || 0} unid.</strong>
+          <small class="d-block text-muted">(${hist.conteoDispensaciones || 0} despachos)</small>
+        </td>
+        <td class="text-center">${demandaHtml}</td>
+        <td class="text-center">${diasCoberturaHtml}</td>
+        <td class="text-center">${sugerenciaHtml}</td>
+        <td>${fiabilidadHtml}</td>
+      `;
+
+      tbody.appendChild(tr);
+
+      // Actualizar también la fila correspondiente en la tabla principal de inventario
+      const celdaPrincipal = document.getElementById('sug-ia-' + med.id);
+      if (celdaPrincipal) {
+        if (est.datosSuficientes) {
+          if (est.cantidadSugerida > 0) {
+            celdaPrincipal.innerHTML = `<span class="badge bg-primary fs-8" title="Demanda proyectada: ${est.demandaProyectada30d} unid."><i class="bi bi-cart-plus me-1"></i>+${est.cantidadSugerida} sugeridas</span>`;
+          } else {
+            celdaPrincipal.innerHTML = `<span class="badge bg-success-subtle text-success border border-success fs-8"><i class="bi bi-check2 me-1"></i>Suficiente</span>`;
+          }
+        } else {
+          celdaPrincipal.innerHTML = `
+            <span class="badge bg-warning-subtle text-dark border border-warning fs-9 d-block" title="${escapeHtml(est.motivoInsuficiencia || 'Datos insuficientes')}">
+              <i class="bi bi-exclamation-triangle me-1"></i>Datos insuficientes (No confiable)
+            </span>
+            ${est.cantidadSugerida > 0 ? `<small class="text-secondary d-block fs-9 mt-1">+${est.cantidadSugerida} para stock mín.</small>` : ''}
+          `;
+        }
+      }
+    });
+  }
+}
+
+function ocultarResultadosIa() {
+  const estadoInicial = document.getElementById('iaEstadoInicial');
+  const estadoResultados = document.getElementById('iaEstadoResultados');
+  const estadoCargando = document.getElementById('iaEstadoCargando');
+  const estadoError = document.getElementById('iaEstadoError');
+  const btn = document.getElementById('btnConsultarIa');
+  const btnOcultar = document.getElementById('btnOcultarIa');
+
+  if (estadoResultados) estadoResultados.classList.add('d-none');
+  if (estadoCargando) estadoCargando.classList.add('d-none');
+  if (estadoError) estadoError.classList.add('d-none');
+  if (estadoInicial) estadoInicial.classList.remove('d-none');
+  if (btnOcultar) btnOcultar.classList.add('d-none');
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-robot me-1"></i> Consultar IA';
+  }
+
+  // Restablecer celdas de la tabla principal
+  document.querySelectorAll('.celda-sugerencia-ia').forEach(td => {
+    td.innerHTML = '<span class="text-muted fs-8" title="Presiona \'Consultar IA\' para calcular estimación"><i class="bi bi-dash"></i></span>';
+  });
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Prevención de repetición automática:
+ * Al navegar hacia atrás (bfcache), recargar o cambiar de sección,
+ * NUNCA se invoca automáticamente consultarIa().
+ */
+window.addEventListener('pageshow', function(event) {
+  // Asegurar que permanezca en espera hasta que el usuario pulse "Consultar IA"
+});
+</script>
+
+<%- include('../partials/footer') %>
+

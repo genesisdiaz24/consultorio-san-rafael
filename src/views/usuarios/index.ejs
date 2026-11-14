@@ -1,0 +1,91 @@
+<%- include('../partials/header') %>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-people-fill text-teal me-2"></i>Gestión de Usuarios y Roles
+    </h1>
+    <p class="text-muted mb-0">Control de cuentas del personal clínico y administrativo, asignación de roles y estados de acceso.</p>
+  </div>
+  <a href="/usuarios/nuevo" class="btn btn-teal fw-semibold shadow-sm">
+    <i class="bi bi-person-plus-fill me-1"></i> Crear Nuevo Usuario
+  </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light fs-8 text-uppercase">
+          <tr>
+            <th>Nombre Completo</th>
+            <th>Usuario / Login</th>
+            <th>Correo Electrónico</th>
+            <th>Rol de Acceso</th>
+            <th class="text-center">Estado</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (usuarios && usuarios.length > 0) { %>
+            <% usuarios.forEach(function(u) { %>
+              <tr>
+                <td>
+                  <strong class="text-dark"><%= u.nombre %></strong>
+                </td>
+                <td>
+                  <span class="badge bg-light text-dark border font-monospace fs-7">
+                    <%= u.usuario %>
+                  </span>
+                </td>
+                <td>
+                  <span class="text-muted fs-7"><%= u.correo || 'Sin correo' %></span>
+                </td>
+                <td>
+                  <% if (u.rol === 'ADMINISTRADOR') { %>
+                    <span class="badge bg-dark py-2 px-3">
+                      <i class="bi bi-shield-lock-fill me-1"></i> ADMINISTRADOR
+                    </span>
+                  <% } else if (u.rol === 'MEDICO') { %>
+                    <span class="badge bg-success py-2 px-3">
+                      <i class="bi bi-stethoscope me-1"></i> MÉDICO
+                    </span>
+                  <% } else if (u.rol === 'SECRETARIA' || u.rol === 'RECEPCION') { %>
+                    <span class="badge bg-primary py-2 px-3">
+                      <i class="bi bi-calendar2-check me-1"></i> SECRETARÍA
+                    </span>
+                  <% } else if (u.rol === 'FARMACIA') { %>
+                    <span class="badge bg-warning text-dark py-2 px-3">
+                      <i class="bi bi-capsule me-1"></i> FARMACIA
+                    </span>
+                  <% } %>
+                </td>
+                <td class="text-center">
+                  <% if (u.activo) { %>
+                    <span class="badge bg-success-subtle text-success border border-success">Activo</span>
+                  <% } else { %>
+                    <span class="badge bg-danger-subtle text-danger border border-danger">Inactivo</span>
+                  <% } %>
+                </td>
+                <td class="text-end">
+                  <% if (usuarioActual && usuarioActual.id !== u.id) { %>
+                    <form action="/usuarios/<%= u.id %>/estado" method="POST" class="d-inline">
+                      <button type="submit" class="btn btn-sm <%= u.activo ? 'btn-outline-danger' : 'btn-outline-success' %>" title="<%= u.activo ? 'Desactivar usuario' : 'Activar usuario' %>">
+                        <i class="bi <%= u.activo ? 'bi-person-x' : 'bi-person-check' %> me-1"></i>
+                        <%= u.activo ? 'Desactivar' : 'Activar' %>
+                      </button>
+                    </form>
+                  <% } else { %>
+                    <span class="badge bg-light text-muted border">Tu sesión actual</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

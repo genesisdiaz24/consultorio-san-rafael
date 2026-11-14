@@ -1,0 +1,243 @@
+<%- include('../partials/header') %>
+<% const esAdminArs = usuarioActual && usuarioActual.rol === 'ADMINISTRADOR'; %>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-sliders text-teal me-2"></i>Tarifario y Coberturas: <span class="text-teal"><%= ars.nombre %></span>
+    </h1>
+    <% if (esAdminArs) { %>
+      <p class="text-muted mb-0">Configuración dinámica de tarifas pactadas, porcentaje o monto de cobertura y copagos.</p>
+    <% } else { %>
+      <p class="text-muted mb-0"><i class="bi bi-eye me-1"></i>Consulta de tarifas pactadas y coberturas (solo lectura). Solo el Administrador puede modificarlas.</p>
+    <% } %>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/ars" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i> Volver a ARS
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Columna Izquierda: Listado de Tarifas Configuradas (ancho completo en modo solo lectura) -->
+  <div class="col-12 <%= esAdminArs ? 'col-lg-7' : '' %>">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white py-3 border-0">
+        <h5 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-tags text-teal me-2"></i>Tarifas Configuradas para esta Aseguradora
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light fs-8 text-uppercase">
+              <tr>
+                <th>Servicio Médico</th>
+                <th>Tarifa Pactada</th>
+                <th>Cobertura Configurada</th>
+                <th>Copago Estimado</th>
+                <% if (esAdminArs) { %><th class="text-end">Acción</th><% } %>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (tarifas && tarifas.length > 0) { %>
+                <% tarifas.forEach(function(t) { %>
+                  <% 
+                    let coberturaCalculada = 0;
+                    let tarifaNum = parseFloat(t.tarifa_pactada);
+                    let valCobNum = parseFloat(t.valor_cobertura);
+                    let copagoFijo = parseFloat(t.copago_fijo) || 0;
+
+                    if (t.tipo_cobertura === 'PORCENTAJE') {
+                      coberturaCalculada = (tarifaNum * valCobNum) / 100;
+                    } else {
+                      coberturaCalculada = Math.min(tarifaNum, valCobNum);
+                    }
+                    let copagoPaciente = Math.max(0, tarifaNum - coberturaCalculada + copagoFijo);
+                  %>
+                  <tr>
+                    <td>
+                      <strong class="text-dark d-block"><%= t.servicio_nombre %></strong>
+                      <small class="text-muted font-monospace"><%= t.servicio_codigo %> &bull; Base: <%= formatoMoneda(t.precio_base) %></small>
+                    </td>
+                    <td>
+                      <span class="fw-bold text-dark"><%= formatoMoneda(t.tarifa_pactada) %></span>
+                    </td>
+                    <td>
+                      <% if (t.tipo_cobertura === 'PORCENTAJE') { %>
+                        <span class="badge bg-teal-subtle text-teal fw-semibold">
+                          <%= t.valor_cobertura %>% de Cobertura
+                        </span>
+                        <small class="d-block text-muted fs-8">(Cubierto: <%= formatoMoneda(coberturaCalculada) %>)</small>
+                      <% } else { %>
+                        <span class="badge bg-primary-subtle text-primary fw-semibold">
+                          Fijo: <%= formatoMoneda(t.valor_cobertura) %>
+                        </span>
+                      <% } %>
+                    </td>
+                    <td>
+                      <strong class="text-danger"><%= formatoMoneda(copagoPaciente) %></strong>
+                      <% if (t.copago_fijo > 0) { %>
+                        <small class="d-block text-muted fs-8">Incluye copago fijo <%= formatoMoneda(t.copago_fijo) %></small>
+                      <% } %>
+                    </td>
+                    <% if (esAdminArs) { %>
+                    <td class="text-end">
+                      <form action="/ars/<%= ars.id %>/tarifas/<%= t.id %>/eliminar" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que desea eliminar esta tarifa?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger border-0" title="Eliminar tarifa">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </form>
+                    </td>
+                    <% } %>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="<%= esAdminArs ? 5 : 4 %>" class="text-center py-5 text-muted">
+                    <i class="bi bi-tags fs-1 d-block mb-2 text-teal-light"></i>
+                    <h6 class="fw-bold text-dark">No hay tarifas configuradas para <%= ars.nombre %></h6>
+                    <p class="mb-0"><%= esAdminArs ? 'Utilice el formulario de la derecha para agregar servicios y definir sus coberturas.' : 'El Administrador aún no ha configurado tarifas para esta aseguradora.' %></p>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Columna Derecha: Formulario de Configuración de Tarifa (solo Administrador) -->
+  <% if (esAdminArs) { %>
+  <div class="col-12 col-lg-5">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 border-0">
+        <h5 class="fw-bold mb-0 text-dark">
+          <i class="bi bi-plus-circle text-teal me-2"></i>Agregar o Modificar Tarifa
+        </h5>
+      </div>
+      <div class="card-body p-4 pt-0">
+        <form action="/ars/<%= ars.id %>/tarifas" method="POST" id="formTarifa">
+          
+          <div class="mb-3">
+            <label class="form-label fs-7 fw-semibold">Servicio Médico <span class="text-danger">*</span></label>
+            <select name="servicio_id" id="servicio_select" class="form-select" required onchange="actualizarPrecioBase(this)">
+              <option value="">Seleccione el servicio a tarifar...</option>
+              <% if (servicios && servicios.length > 0) { %>
+                <% servicios.forEach(function(s) { %>
+                  <option value="<%= s.id %>" data-precio="<%= s.precio_base %>">
+                    <%= s.nombre %> (Base: <%= formatoMoneda(s.precio_base) %>)
+                  </option>
+                <% }); %>
+              <% } %>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fs-7 fw-semibold">Tarifa Pactada (RD$) <span class="text-danger">*</span></label>
+            <input type="number" step="0.01" name="tarifa_pactada" id="tarifa_pactada" class="form-control" placeholder="1500.00" required oninput="calcularPrevisualizacion()">
+            <div class="form-text fs-8">Monto total convenido con esta aseguradora para este servicio.</div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-12 col-sm-6">
+              <label class="form-label fs-7 fw-semibold">Tipo de Cobertura <span class="text-danger">*</span></label>
+              <select name="tipo_cobertura" id="tipo_cobertura" class="form-select" onchange="cambiarTipoCobertura(this)">
+                <option value="PORCENTAJE">Porcentaje (%)</option>
+                <option value="MONTO_FIJO">Monto Fijo (RD$)</option>
+              </select>
+            </div>
+            <div class="col-12 col-sm-6">
+              <label class="form-label fs-7 fw-semibold" id="labelValorCobertura">Porcentaje de Cobertura (%) <span class="text-danger">*</span></label>
+              <input type="number" step="0.01" name="valor_cobertura" id="valor_cobertura" class="form-control" placeholder="80" required oninput="calcularPrevisualizacion()">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fs-7 fw-semibold">Copago Adicional Fijo (RD$)</label>
+            <input type="number" step="0.01" name="copago_fijo" id="copago_fijo" class="form-control" value="0.00" oninput="calcularPrevisualizacion()">
+            <div class="form-text fs-8">Deducible o copago establecido por contrato (si aplica).</div>
+          </div>
+
+          <!-- Previsualización en Vivo de la Fórmula -->
+          <div class="alert alert-light border p-3 rounded-3 mb-4">
+            <span class="fs-8 text-secondary text-uppercase fw-bold d-block mb-2">Simulación de Liquidación:</span>
+            <div class="d-flex justify-content-between fs-7 mb-1">
+              <span>Monto cubierto por aseguradora:</span>
+              <strong class="text-teal" id="prevCubierto">RD$ 0.00</strong>
+            </div>
+            <div class="d-flex justify-content-between fs-7 pt-1 border-top">
+              <span><strong>Diferencia que paga el paciente:</strong></span>
+              <strong class="text-danger" id="prevCopago">RD$ 0.00</strong>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fs-7 fw-semibold">Notas / Condiciones especiales</label>
+            <input type="text" name="notas" class="form-control" placeholder="Ej: Requiere carnet vigente y cédula física...">
+          </div>
+
+          <div class="d-grid">
+            <button type="submit" class="btn btn-teal fw-semibold shadow-sm">
+              <i class="bi bi-save me-1"></i> Guardar Configuración de Tarifa
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</div>
+
+<% if (esAdminArs) { %>
+<script>
+function actualizarPrecioBase(select) {
+  const opt = select.options[select.selectedIndex];
+  if (opt && opt.value !== '') {
+    const precio = opt.getAttribute('data-precio');
+    const inputTarifa = document.getElementById('tarifa_pactada');
+    if (!inputTarifa.value || inputTarifa.value == '0') {
+      inputTarifa.value = parseFloat(precio).toFixed(2);
+    }
+  }
+  calcularPrevisualizacion();
+}
+
+function cambiarTipoCobertura(select) {
+  const label = document.getElementById('labelValorCobertura');
+  const input = document.getElementById('valor_cobertura');
+  if (select.value === 'PORCENTAJE') {
+    label.innerText = 'Porcentaje de Cobertura (%) *';
+    input.placeholder = '80';
+  } else {
+    label.innerText = 'Monto Fijo Cubierto (RD$) *';
+    input.placeholder = '1200.00';
+  }
+  calcularPrevisualizacion();
+}
+
+function calcularPrevisualizacion() {
+  const tarifa = parseFloat(document.getElementById('tarifa_pactada').value) || 0;
+  const tipo = document.getElementById('tipo_cobertura').value;
+  const valorCob = parseFloat(document.getElementById('valor_cobertura').value) || 0;
+  const copagoFijo = parseFloat(document.getElementById('copago_fijo').value) || 0;
+
+  let cubierto = 0;
+  if (tipo === 'PORCENTAJE') {
+    cubierto = (tarifa * valorCob) / 100.0;
+  } else {
+    cubierto = Math.min(tarifa, valorCob);
+  }
+
+  const copago = Math.max(0, tarifa - cubierto + copagoFijo);
+
+  document.getElementById('prevCubierto').innerText = 'RD$ ' + cubierto.toLocaleString('es-DO', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  document.getElementById('prevCopago').innerText = 'RD$ ' + copago.toLocaleString('es-DO', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+</script>
+<% } %>
+
+<%- include('../partials/footer') %>
+

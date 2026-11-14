@@ -1,0 +1,181 @@
+<%- include('../partials/header') %>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h3 fw-bold text-dark mb-1">
+          <i class="bi <%= esEdicion ? 'bi-pencil-square' : 'bi-person-plus-fill' %> text-teal me-2"></i>
+          <%= esEdicion ? 'Editar Ficha de Paciente' : 'Registrar Nuevo Paciente' %>
+        </h1>
+        <p class="text-muted mb-0">Complete la información demográfica, seguro médico y antecedentes clínicos.</p>
+      </div>
+      <a href="/pacientes" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Volver al listado
+      </a>
+    </div>
+
+    <!-- Mensaje de aviso sobre control de duplicados -->
+    <div class="alert alert-light border border-teal-subtle d-flex align-items-center p-3 mb-4 rounded-3 shadow-sm">
+      <i class="bi bi-shield-lock-fill fs-4 text-teal me-3"></i>
+      <div class="fs-7 text-secondary">
+        <strong>Control de Registro Único:</strong> La <strong>Identificación (Cédula o Pasaporte)</strong> es única en el consultorio para evitar registros duplicados en el historial médico.
+      </div>
+    </div>
+
+    <form action="<%= esEdicion ? '/pacientes/' + paciente.id : '/pacientes' %>" method="POST" class="needs-validation" novalidate>
+      
+      <!-- Bloque 1: Identificación y Datos Personales -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+          <h5 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-person-vcard text-teal me-2"></i>1. Datos de Identificación y Personales
+          </h5>
+        </div>
+        <div class="card-body p-4 pt-1">
+          <div class="row g-3">
+            <div class="col-12 col-md-3">
+              <label for="tipo_documento" class="form-label fw-semibold fs-7">Tipo de Documento</label>
+              <select name="tipo_documento" id="tipo_documento" class="form-select">
+                <option value="Cédula" <%= paciente.tipo_documento === 'Cédula' ? 'selected' : '' %>>Cédula de Identidad</option>
+                <option value="Pasaporte" <%= paciente.tipo_documento === 'Pasaporte' ? 'selected' : '' %>>Pasaporte</option>
+                <option value="Otro" <%= paciente.tipo_documento === 'Otro' ? 'selected' : '' %>>Otro documento</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-md-5">
+              <label for="identificacion" class="form-label fw-semibold fs-7">Número de Identificación <span class="text-danger">*</span></label>
+              <input type="text" name="identificacion" id="identificacion" value="<%= paciente.identificacion || '' %>" class="form-control font-monospace" placeholder="Ej: 001-1234567-8" required>
+              <div class="form-text fs-8">Evita duplicaciones; verifique antes de guardar.</div>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label for="genero" class="form-label fw-semibold fs-7">Género <span class="text-danger">*</span></label>
+              <select name="genero" id="genero" class="form-select" required>
+                <option value="">Seleccione género...</option>
+                <option value="Masculino" <%= paciente.genero === 'Masculino' ? 'selected' : '' %>>Masculino</option>
+                <option value="Femenino" <%= paciente.genero === 'Femenino' ? 'selected' : '' %>>Femenino</option>
+                <option value="Otro" <%= paciente.genero === 'Otro' ? 'selected' : '' %>>Otro</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label for="nombre" class="form-label fw-semibold fs-7">Nombres <span class="text-danger">*</span></label>
+              <input type="text" name="nombre" id="nombre" value="<%= paciente.nombre || '' %>" class="form-control" placeholder="Ej: Carlos Alberto" required>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label for="apellido" class="form-label fw-semibold fs-7">Apellidos <span class="text-danger">*</span></label>
+              <input type="text" name="apellido" id="apellido" value="<%= paciente.apellido || '' %>" class="form-control" placeholder="Ej: Martínez Pérez" required>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label for="fecha_nacimiento" class="form-label fw-semibold fs-7">Fecha de Nacimiento <span class="text-danger">*</span></label>
+              <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" value="<%= paciente.fecha_nacimiento ? (new Date(paciente.fecha_nacimiento).toISOString().split('T')[0]) : '' %>" class="form-control" required>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bloque 2: Contacto y Ubicación -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+          <h5 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-geo-alt text-teal me-2"></i>2. Información de Contacto y Domicilio
+          </h5>
+        </div>
+        <div class="card-body p-4 pt-1">
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label for="telefono" class="form-label fw-semibold fs-7">Teléfono de Contacto <span class="text-danger">*</span></label>
+              <input type="tel" name="telefono" id="telefono" value="<%= paciente.telefono || '' %>" class="form-control" placeholder="Ej: 809-555-0123" required>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label for="correo" class="form-label fw-semibold fs-7">Correo Electrónico</label>
+              <input type="email" name="correo" id="correo" value="<%= paciente.correo || '' %>" class="form-control" placeholder="Ej: paciente@correo.com">
+            </div>
+
+            <div class="col-12">
+              <label for="direccion" class="form-label fw-semibold fs-7">Dirección Residencial</label>
+              <input type="text" name="direccion" id="direccion" value="<%= paciente.direccion || '' %>" class="form-control" placeholder="Ej: Calle Las Flores #24, Sector El Paraíso">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bloque 3: ARS y Seguro de Salud -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+          <h5 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-shield-check text-teal me-2"></i>3. Aseguradora de Salud (ARS) y Cobertura
+          </h5>
+        </div>
+        <div class="card-body p-4 pt-1">
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label for="ars_id" class="form-label fw-semibold fs-7">ARS / Seguro Médico</label>
+              <select name="ars_id" id="ars_id" class="form-select">
+                <option value="">Particular / Sin Seguro Médico</option>
+                <% if (arsList && arsList.length > 0) { %>
+                  <% arsList.forEach(function(ars) { %>
+                    <option value="<%= ars.id %>" <%= paciente.ars_id == ars.id ? 'selected' : '' %>>
+                      <%= ars.nombre %>
+                    </option>
+                  <% }); %>
+                <% } %>
+              </select>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label for="numero_afiliado" class="form-label fw-semibold fs-7">Número de Afiliado / Póliza</label>
+              <input type="text" name="numero_afiliado" id="numero_afiliado" value="<%= paciente.numero_afiliado || '' %>" class="form-control" placeholder="Ej: SEN-88776655">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <% if (typeof esClinico !== 'undefined' ? esClinico : (usuarioActual && ['MEDICO', 'ADMINISTRADOR'].includes(usuarioActual.rol))) { %>
+      <!-- Bloque 4: Antecedentes Clínicos Relevantes (Exclusivo Médico y Administrador) -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+          <h5 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-journal-medical text-teal me-2"></i>4. Antecedentes Médicos y Clínicos
+          </h5>
+        </div>
+        <div class="card-body p-4 pt-1">
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label for="antecedentes_alergicos" class="form-label fw-semibold fs-7 text-danger">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>Alergias Conocidas
+              </label>
+              <textarea name="antecedentes_alergicos" id="antecedentes_alergicos" rows="3" class="form-control" placeholder="Alergia a fármacos (Penicilina, AINEs), alimentos o sustancias..."><%= paciente.antecedentes_alergicos || '' %></textarea>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label for="antecedentes_personales" class="form-label fw-semibold fs-7">Antecedentes Personales Patológicos</label>
+              <textarea name="antecedentes_personales" id="antecedentes_personales" rows="3" class="form-control" placeholder="Hipertensión, Diabetes, Asma, Cirugías previas..."><%= paciente.antecedentes_personales || '' %></textarea>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label for="antecedentes_familiares" class="form-label fw-semibold fs-7">Antecedentes Familiares</label>
+              <textarea name="antecedentes_familiares" id="antecedentes_familiares" rows="3" class="form-control" placeholder="Cardiopatías, Diabetes, Cáncer en padres o hermanos..."><%= paciente.antecedentes_familiares || '' %></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% } %>
+
+      <div class="d-flex justify-content-end gap-2 mb-5">
+        <a href="/pacientes" class="btn btn-outline-secondary px-4">Cancelar</a>
+        <button type="submit" class="btn btn-teal fw-semibold px-5 shadow-sm">
+          <i class="bi bi-check2-circle me-1"></i> <%= esEdicion ? 'Actualizar Ficha de Paciente' : 'Guardar y Abrir Ficha' %>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
+
