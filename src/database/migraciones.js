@@ -76,6 +76,50 @@ const MIGRACIONES = [
       ON CONFLICT (medicamento_id, ars_id) DO NOTHING;
     `,
   },
+  {
+    nombre: '2026-11-consultas-medico',
+    sql: `
+      -- Médico que atendió la consulta. Los médicos son usuarios con rol MEDICO;
+      -- el diseño admite varios médicos aunque hoy el consultorio tenga uno solo.
+      ALTER TABLE consultas ADD COLUMN IF NOT EXISTS medico_id INTEGER;
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_consultas_medico') THEN
+          -- RESTRICT: no se puede borrar un médico con consultas (los usuarios se desactivan, no se borran)
+          ALTER TABLE consultas
+            ADD CONSTRAINT fk_consultas_medico FOREIGN KEY (medico_id) REFERENCES usuarios(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_consultas_medico ON consultas(medico_id);
+
+      -- La clave foránea apunta a usuarios: este trigger garantiza que sea un usuario con rol MEDICO
+      CREATE OR REPLACE FUNCTION validar_medico_consulta() RETURNS trigger AS $fn$
+      BEGIN
+        IF NEW.medico_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM usuarios WHERE id = NEW.medico_id AND rol = 'MEDICO') THEN
+          RAISE EXCEPTION 'El usuario % no tiene rol MEDICO y no puede figurar como médico de una consulta', NEW.medico_id
+            USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN NEW;
+      END
+      $fn$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_validar_medico_consulta ON consultas;
+      CREATE TRIGGER trg_validar_medico_consulta
+        BEFORE INSERT OR UPDATE OF medico_id ON consultas
+        FOR EACH ROW EXECUTE FUNCTION validar_medico_consulta();
+
+      -- Consultas existentes → Dr. Rafael Morales (usuario "medico"; si no existe, el primer médico registrado)
+      UPDATE consultas c SET medico_id = m.id
+      FROM (
+        SELECT id FROM usuarios WHERE rol = 'MEDICO'
+        ORDER BY (usuario = 'medico') DESC, id ASC LIMIT 1
+      ) m
+      WHERE c.medico_id IS NULL;
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {

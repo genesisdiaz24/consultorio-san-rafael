@@ -185,6 +185,7 @@
     </div>
     <div class="col-6 text-end">
       <div class="d-inline-block text-center" style="border-top: 1px solid #333; width: 220px; padding-top: 4px;">
+        <% if (receta.medico_nombre) { %><span class="fs-7 text-dark d-block fw-semibold"><%= receta.medico_nombre %></span><% } %>
         <strong class="fs-8 text-dark d-block">Firma y Sello Médico</strong>
         <small class="text-muted fs-8"><%= clinicName %></small>
       </div>

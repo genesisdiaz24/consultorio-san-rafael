@@ -109,13 +109,13 @@ ON CONFLICT (paciente_id, fecha, hora) DO NOTHING;
 
 -- 7. CONSULTA Y RECETA INICIALES (Para el paciente Carlos Martínez)
 INSERT INTO consultas (
-    cita_id, paciente_id, servicio_id, fecha_consulta, motivo_consulta,
+    cita_id, paciente_id, servicio_id, medico_id, fecha_consulta, motivo_consulta,
     antecedentes_revisados, signos_vitales, hallazgos_clinicos,
     diagnostico_clinico, tratamiento_plan, notas_adicionales,
     ars_id, valor_total, valor_cubierto_ars, diferencia_paciente, estado_pago
 )
 SELECT
-    c.id, p.id, s.id, CURRENT_TIMESTAMP - INTERVAL '30 minutes',
+    c.id, p.id, s.id, (SELECT id FROM usuarios WHERE usuario = 'medico'), CURRENT_TIMESTAMP - INTERVAL '30 minutes',
     'Cefalea persistente y control de presión arterial',
     'Hipertensión arterial en tratamiento con Losartán. Alergia a la penicilina.',
     '{"presion_arterial":"135/85 mmHg","temperatura":"36.6 °C","frecuencia_cardiaca":"76 lpm","frecuencia_respiratoria":"16 rpm","peso":"78 kg","talla":"174 cm"}'::jsonb,

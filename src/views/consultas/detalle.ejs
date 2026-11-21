@@ -9,6 +9,7 @@
     <p class="text-muted mb-0">
       Fecha: <strong><%= formatoFecha(consulta.fecha_consulta) %></strong> &bull; Paciente: 
       <strong><%= consulta.paciente_nombre %> <%= consulta.paciente_apellido %></strong>
+      &bull; Médico: <strong><%= consulta.medico_nombre || 'Sin asignar' %></strong>
     </p>
   </div>
   <div class="d-flex gap-2">
@@ -196,7 +197,7 @@
           <!-- Firma del Médico en Impresión -->
           <div class="d-none d-print-block mt-5 pt-4 text-center">
             <div class="d-inline-block border-top border-dark pt-2 px-5">
-              <strong>Dr. / Dra. Especialista en Consulta</strong><br>
+              <strong><%= consulta.medico_nombre || 'Dr. / Dra. Especialista en Consulta' %></strong><br>
               <span class="fs-8">Consultorio Médico San Rafael &bull; Exequátur Médico</span>
             </div>
           </div>

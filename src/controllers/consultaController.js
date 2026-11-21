@@ -2,6 +2,9 @@ const db = require('../config/db');
 const imecfService = require('../services/imecfService');
 const ecfController = require('./ecfController');
 
+// Nombre del médico (usuarios u) sin la etiqueta final entre paréntesis, p. ej. "Dr. Rafael Morales (Médico)" → "Dr. Rafael Morales"
+const NOMBRE_MEDICO = `REGEXP_REPLACE(u.nombre, '\\s*\\([^)]*\\)\\s*$', '')`;
+
 // Listado de consultas realizadas
 exports.listar = async (req, res, next) => {
   try {
@@ -368,15 +371,27 @@ exports.guardar = async (req, res, next) => {
       }
     }
 
-    // 1.4 Insertar Consulta vinculada con el cargo en estado Pendiente
+    // 1.4 Médico que atiende: el médico con sesión iniciada. Si registra la consulta el administrador,
+    // se asigna al único médico activo; con varios médicos activos queda sin asignar (no se adivina).
+    let medicoId = null;
+    if (esMedico) {
+      medicoId = req.session.usuario.id;
+    } else {
+      const { rows: medicosActivos } = await client.query(
+        `SELECT id FROM usuarios WHERE rol = 'MEDICO' AND activo = true ORDER BY id LIMIT 2`
+      );
+      if (medicosActivos.length === 1) medicoId = medicosActivos[0].id;
+    }
+
+    // 1.5 Insertar Consulta vinculada con el cargo en estado Pendiente
     const consultaQuery = `
       INSERT INTO consultas (
         cita_id, paciente_id, servicio_id, motivo_consulta,
         antecedentes_revisados, signos_vitales, hallazgos_clinicos,
         diagnostico_clinico, tratamiento_plan, notas_adicionales,
         ars_id, valor_total, valor_cubierto_ars, diferencia_paciente,
-        estado_pago
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        estado_pago, medico_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING id
     `;
 
@@ -396,6 +411,7 @@ exports.guardar = async (req, res, next) => {
       finalValorCubierto,
       finalDiferenciaPaciente,
       finalEstadoPago,
+      medicoId,
     ];
 
     const { rows: consultaResult } = await client.query(consultaQuery, consultaValues);
@@ -492,11 +508,13 @@ exports.verDetalle = async (req, res, next) => {
               s.nombre AS servicio_nombre,
               s.codigo AS servicio_codigo,
               COALESCE(s.indicador_facturacion, '4') AS servicio_indicador_facturacion,
-              a.nombre AS ars_nombre
+              a.nombre AS ars_nombre,
+              ${NOMBRE_MEDICO} AS medico_nombre
        FROM consultas c
        INNER JOIN pacientes p ON c.paciente_id = p.id
        LEFT JOIN servicios s ON c.servicio_id = s.id
        LEFT JOIN ars a ON c.ars_id = a.id
+       LEFT JOIN usuarios u ON c.medico_id = u.id
        WHERE c.id = $1`,
       [id]
     );
@@ -701,11 +719,13 @@ exports.verReceta = async (req, res, next) => {
               p.identificacion as paciente_identificacion,
               p.fecha_nacimiento as paciente_nacimiento,
               p.telefono as paciente_telefono,
-              a.nombre as ars_nombre
+              a.nombre as ars_nombre,
+              ${NOMBRE_MEDICO} AS medico_nombre
        FROM recetas r
        INNER JOIN consultas c ON r.consulta_id = c.id
        INNER JOIN pacientes p ON r.paciente_id = p.id
        LEFT JOIN ars a ON p.ars_id = a.id
+       LEFT JOIN usuarios u ON c.medico_id = u.id
        WHERE r.id = $1`,
       [id]
     );

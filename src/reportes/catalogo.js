@@ -61,6 +61,8 @@ const RANGO_FECHAS = [
 ];
 const FILTRO_ARS = { nombre: 'ars_id', etiqueta: 'ARS', tipo: 'select', fuente: 'ars' };
 const NOMBRE_PACIENTE = `p.nombre || ' ' || p.apellido`;
+// Médico de la consulta (usuarios u), sin la etiqueta "(Médico)" del nombre de usuario
+const NOMBRE_MEDICO = `COALESCE(REGEXP_REPLACE(u.nombre, '\\s*\\([^)]*\\)\\s*$', ''), 'Sin asignar')`;
 const EDAD = `EXTRACT(YEAR FROM AGE(p.fecha_nacimiento))::int`;
 
 const MODULOS = [
@@ -494,6 +496,7 @@ const REPORTES = [
     columnas: [
       { clave: 'fecha', etiqueta: 'Fecha', tipo: 'fechahora' },
       { clave: 'paciente', etiqueta: 'Paciente' },
+      { clave: 'medico', etiqueta: 'Médico' },
       { clave: 'servicio', etiqueta: 'Servicio' },
       { clave: 'motivo', etiqueta: 'Motivo' },
       { clave: 'diagnostico', etiqueta: 'Diagnóstico' },
@@ -502,11 +505,12 @@ const REPORTES = [
     consulta(f) {
       const w = new Condiciones().rango(L('co.fecha_consulta'), f).agregar('co.servicio_id = ?', f.servicio_id);
       return {
-        sql: `SELECT ${L('co.fecha_consulta')} AS fecha, ${NOMBRE_PACIENTE} AS paciente, COALESCE(s.nombre, '—') AS servicio,
-                     co.motivo_consulta AS motivo, co.diagnostico_clinico AS diagnostico,
+        sql: `SELECT ${L('co.fecha_consulta')} AS fecha, ${NOMBRE_PACIENTE} AS paciente, ${NOMBRE_MEDICO} AS medico,
+                     COALESCE(s.nombre, '—') AS servicio, co.motivo_consulta AS motivo, co.diagnostico_clinico AS diagnostico,
                      COALESCE(a.nombre, 'Sin ARS') AS ars
               FROM consultas co
               INNER JOIN pacientes p ON p.id = co.paciente_id
+              LEFT JOIN usuarios u ON u.id = co.medico_id
               LEFT JOIN servicios s ON s.id = co.servicio_id
               LEFT JOIN ars a ON a.id = co.ars_id
               ${w.where()} ORDER BY co.fecha_consulta DESC`,
@@ -606,6 +610,7 @@ const REPORTES = [
       { clave: 'codigo_receta', etiqueta: 'Código' },
       { clave: 'fecha_emision', etiqueta: 'Emitida', tipo: 'fechahora' },
       { clave: 'paciente', etiqueta: 'Paciente' },
+      { clave: 'medico', etiqueta: 'Médico' },
       { clave: 'diagnostico', etiqueta: 'Diagnóstico' },
       { clave: 'medicamentos', etiqueta: 'Medicamentos', tipo: 'numero', total: 'suma' },
       { clave: 'entregados', etiqueta: 'Entregados', tipo: 'numero', total: 'suma' },
@@ -614,15 +619,17 @@ const REPORTES = [
     consulta(f) {
       const w = new Condiciones().rango(L('r.fecha_emision'), f);
       return {
-        sql: `SELECT r.codigo_receta, ${L('r.fecha_emision')} AS fecha_emision, ${NOMBRE_PACIENTE} AS paciente, co.diagnostico_clinico AS diagnostico,
+        sql: `SELECT r.codigo_receta, ${L('r.fecha_emision')} AS fecha_emision, ${NOMBRE_PACIENTE} AS paciente,
+                     ${NOMBRE_MEDICO} AS medico, co.diagnostico_clinico AS diagnostico,
                      COUNT(rd.id)::int AS medicamentos,
                      COUNT(rd.id) FILTER (WHERE rd.estado_dispensacion = 'Entregado')::int AS entregados,
                      COUNT(rd.id) FILTER (WHERE rd.estado_dispensacion = 'Pendiente')::int AS pendientes
               FROM recetas r
               INNER JOIN pacientes p ON p.id = r.paciente_id
               INNER JOIN consultas co ON co.id = r.consulta_id
+              LEFT JOIN usuarios u ON u.id = co.medico_id
               LEFT JOIN receta_detalles rd ON rd.receta_id = r.id
-              ${w.where()} GROUP BY r.id, p.id, co.id ORDER BY r.fecha_emision DESC`,
+              ${w.where()} GROUP BY r.id, p.id, co.id, u.id ORDER BY r.fecha_emision DESC`,
         params: w.params,
       };
     },

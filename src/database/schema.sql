@@ -120,6 +120,8 @@ CREATE TABLE IF NOT EXISTS consultas (
     cita_id INTEGER REFERENCES citas(id) ON DELETE SET NULL,
     paciente_id INTEGER NOT NULL REFERENCES pacientes(id) ON DELETE CASCADE,
     servicio_id INTEGER REFERENCES servicios(id) ON DELETE SET NULL,
+    -- Médico que atendió (usuario con rol MEDICO; lo valida el trigger trg_validar_medico_consulta de migraciones.js)
+    medico_id INTEGER CONSTRAINT fk_consultas_medico REFERENCES usuarios(id) ON DELETE RESTRICT,
     fecha_consulta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     motivo_consulta TEXT NOT NULL,
     antecedentes_revisados TEXT,
