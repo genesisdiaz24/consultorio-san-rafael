@@ -878,7 +878,7 @@ const REPORTES = [
     id: 'facturacion-ingresos-diarios',
     modulo: 'facturacion',
     titulo: 'Ingresos diarios (cuadre de caja)',
-    descripcion: 'Por día: consultas, monto facturado, parte cubierta por ARS, parte del paciente y lo cobrado.',
+    descripcion: 'Por día: consultas, facturado, parte de la ARS, lo cobrado a pacientes por método de pago y lo pendiente.',
     icono: 'bi-cash-stack',
     filtros: [...RANGO_FECHAS],
     columnas: [
@@ -886,16 +886,22 @@ const REPORTES = [
       { clave: 'consultas', etiqueta: 'Consultas', tipo: 'numero', total: 'suma' },
       { clave: 'facturado', etiqueta: 'Facturado', tipo: 'moneda', total: 'suma' },
       { clave: 'cubierto_ars', etiqueta: 'A cargo de ARS', tipo: 'moneda', total: 'suma' },
-      { clave: 'paciente', etiqueta: 'A cargo de pacientes', tipo: 'moneda', total: 'suma' },
-      { clave: 'cobrado', etiqueta: 'Cobrado a pacientes', tipo: 'moneda', total: 'suma' },
+      { clave: 'efectivo', etiqueta: 'Cobrado efectivo', tipo: 'moneda', total: 'suma' },
+      { clave: 'tarjeta', etiqueta: 'Cobrado tarjeta', tipo: 'moneda', total: 'suma' },
+      { clave: 'otros', etiqueta: 'Transferencia / PayPal / otro', tipo: 'moneda', total: 'suma' },
+      { clave: 'cobrado', etiqueta: 'Total cobrado', tipo: 'moneda', total: 'suma' },
       { clave: 'pendiente', etiqueta: 'Pendiente de cobro', tipo: 'moneda', total: 'suma' },
     ],
     consulta(f) {
       const w = new Condiciones().rango(L('co.fecha_consulta'), f);
+      const pagado = (extra = '') => `COALESCE(SUM(co.diferencia_paciente) FILTER (WHERE co.estado_pago = 'Pagado'${extra}), 0)`;
       return {
         sql: `SELECT ${L('co.fecha_consulta')}::date AS fecha, COUNT(*)::int AS consultas, SUM(co.valor_total) AS facturado,
-                     SUM(co.valor_cubierto_ars) AS cubierto_ars, SUM(co.diferencia_paciente) AS paciente,
-                     COALESCE(SUM(co.diferencia_paciente) FILTER (WHERE co.estado_pago = 'Pagado'), 0) AS cobrado,
+                     SUM(co.valor_cubierto_ars) AS cubierto_ars,
+                     ${pagado(` AND co.metodo_pago = 'Efectivo'`)} AS efectivo,
+                     ${pagado(` AND co.metodo_pago = 'Tarjeta de Débito / Crédito'`)} AS tarjeta,
+                     ${pagado(` AND (co.metodo_pago IS NULL OR co.metodo_pago NOT IN ('Efectivo', 'Tarjeta de Débito / Crédito'))`)} AS otros,
+                     ${pagado()} AS cobrado,
                      COALESCE(SUM(co.diferencia_paciente) FILTER (WHERE co.estado_pago = 'Pendiente'), 0) AS pendiente
               FROM consultas co ${w.where()}
               GROUP BY ${L('co.fecha_consulta')}::date ORDER BY fecha DESC`,

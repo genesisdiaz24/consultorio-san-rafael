@@ -136,6 +136,9 @@ CREATE TABLE IF NOT EXISTS consultas (
     valor_cubierto_ars NUMERIC(10, 2) NOT NULL DEFAULT 0.00 CHECK (valor_cubierto_ars >= 0),
     diferencia_paciente NUMERIC(10, 2) NOT NULL DEFAULT 0.00 CHECK (diferencia_paciente >= 0),
     estado_pago VARCHAR(20) DEFAULT 'Pendiente' CHECK (estado_pago IN ('Pendiente', 'Pagado', 'Exonerado')),
+    metodo_pago VARCHAR(40) CONSTRAINT chk_consultas_metodo_pago
+        CHECK (metodo_pago IS NULL OR metodo_pago IN ('Efectivo', 'Tarjeta de Débito / Crédito', 'Transferencia Bancaria', 'PayPal')),
+    fecha_pago TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

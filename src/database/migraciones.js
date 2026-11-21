@@ -120,6 +120,23 @@ const MIGRACIONES = [
       WHERE c.medico_id IS NULL;
     `,
   },
+  {
+    nombre: '2026-11-consultas-metodo-pago',
+    sql: `
+      -- Antes el método de pago solo se mostraba en el mensaje de confirmación y se perdía.
+      -- Cobros anteriores a este cambio quedan con método NULL ("no registrado").
+      ALTER TABLE consultas ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(40);
+      ALTER TABLE consultas ADD COLUMN IF NOT EXISTS fecha_pago TIMESTAMP;
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_consultas_metodo_pago') THEN
+          ALTER TABLE consultas ADD CONSTRAINT chk_consultas_metodo_pago
+            CHECK (metodo_pago IS NULL OR metodo_pago IN ('Efectivo', 'Tarjeta de Débito / Crédito', 'Transferencia Bancaria', 'PayPal'));
+        END IF;
+      END $$;
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {

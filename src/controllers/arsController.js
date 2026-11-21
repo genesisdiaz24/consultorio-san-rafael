@@ -500,6 +500,7 @@ exports.registrarCobro = async (req, res, next) => {
     (req.headers.accept && req.headers.accept.includes('application/json')) ||
     req.body?.formato === 'json';
   const consultaId = parseInt(req.params.consultaId, 10);
+  const METODOS_PAGO = ['Efectivo', 'Tarjeta de Débito / Crédito', 'Transferencia Bancaria'];
   const metodoPago = String(req.body.metodo_pago || 'Efectivo').trim();
   const returnTo = req.body.return_to || '/ars/cobrar';
 
@@ -553,14 +554,30 @@ exports.registrarCobro = async (req, res, next) => {
       return res.redirect(returnTo);
     }
 
-    // 3. Registrar el cobro y actualizar estado a 'Pagado'
+    // 2.1 Solo métodos de pago del formulario de cobro (se valida después del control de duplicados)
+    if (!METODOS_PAGO.includes(metodoPago)) {
+      const msg = `Método de pago inválido. Use: ${METODOS_PAGO.join(', ')}.`;
+      if (esJson) return res.status(400).json({ success: false, error: msg });
+      req.flash('error', msg);
+      return res.redirect(returnTo);
+    }
+
+    // 3. Registrar el cobro (con método y fecha de pago) y actualizar estado a 'Pagado'.
+    // "AND estado_pago <> 'Pagado'" evita un cobro doble si llegan dos envíos al mismo tiempo.
     const { rows: updated } = await db.query(
       `UPDATE consultas
-       SET estado_pago = 'Pagado'
-       WHERE id = $1
+       SET estado_pago = 'Pagado', metodo_pago = $2, fecha_pago = CURRENT_TIMESTAMP
+       WHERE id = $1 AND estado_pago <> 'Pagado'
        RETURNING id, valor_total, valor_cubierto_ars, diferencia_paciente, estado_pago`,
-      [consultaId]
+      [consultaId, metodoPago]
     );
+
+    if (updated.length === 0) {
+      const msg = 'Esta consulta ya ha sido pagada previamente. No se permiten cobros duplicados.';
+      if (esJson) return res.status(409).json({ success: false, error: msg });
+      req.flash('warning', msg);
+      return res.redirect(returnTo);
+    }
 
     const copagoNum = parseFloat(updated[0].diferencia_paciente || 0);
     const montoCobrado = copagoNum.toLocaleString('es-DO', { minimumFractionDigits: 2 });

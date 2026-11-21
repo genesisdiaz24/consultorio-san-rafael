@@ -456,7 +456,7 @@ exports.capturarOrden = async (req, res) => {
       ]
     );
 
-    await client.query(`UPDATE consultas SET estado_pago = 'Pagado' WHERE id = $1`, [consultaId]);
+    await client.query(`UPDATE consultas SET estado_pago = 'Pagado', metodo_pago = 'PayPal', fecha_pago = COALESCE(fecha_pago, CURRENT_TIMESTAMP) WHERE id = $1`, [consultaId]);
 
     pagoConfirmado = compRows[0];
     await client.query('COMMIT');
@@ -667,7 +667,7 @@ exports.recibirWebhook = async (req, res) => {
             [captureId, ordenLocal.id]
           );
 
-          await client.query(`UPDATE consultas SET estado_pago = 'Pagado' WHERE id = $1`, [ordenLocal.consulta_id]);
+          await client.query(`UPDATE consultas SET estado_pago = 'Pagado', metodo_pago = 'PayPal', fecha_pago = COALESCE(fecha_pago, CURRENT_TIMESTAMP) WHERE id = $1`, [ordenLocal.consulta_id]);
         }
       }
     } else if (eventType === 'PAYMENT.CAPTURE.PENDING') {
