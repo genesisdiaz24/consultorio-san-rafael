@@ -48,6 +48,80 @@ Sistema web de gestión clínica y administrativa para el **Consultorio Médico 
 
 ---
 
+## 📊 Módulo de Reportes (37 reportes, mínimo 6 por módulo)
+
+Menú **Reportes** (`/reportes`). Cada reporte tiene filtros, fila de totales, gráfico de barras cuando aplica, botón **Imprimir / PDF** (con encabezado del consultorio, fecha y usuario) y exportación **Excel (CSV)**. Todas las fechas y horas se muestran en hora de República Dominicana.
+
+Los reportes se agrupan en **6 módulos**, que reúnen las partes del sistema descritas arriba:
+
+| # | Módulo de reportes | Partes del sistema que cubre | Reportes |
+| :-: | :--- | :--- | :-: |
+| 1 | Pacientes | Fichas de pacientes | 7 |
+| 2 | Citas y Sala de Espera | Agenda, check-in y sala de espera | 6 |
+| 3 | Consultas y Recetas | Consultas, historial clínico y recetas | 6 |
+| 4 | Farmacia e Inventario | Inventario, dispensación, movimientos y coberturas de medicamentos | 6 |
+| 5 | ARS, Cobros y Facturación | ARS y tarifarios, cobros, comprobantes e-CF y pagos PayPal | 6 |
+| 6 | Administración | Usuarios y roles, catálogo de servicios e indicadores generales | 6 |
+| | **Total** | | **37** |
+
+<details>
+<summary>Lista completa de reportes</summary>
+
+| Código | Reporte |
+| :-- | :-- |
+| 1.1 | Directorio general de pacientes |
+| 1.2 | Pacientes por aseguradora (ARS) |
+| 1.3 | Distribución por edad y género |
+| 1.4 | Pacientes nuevos registrados |
+| 1.5 | Pacientes con alergias registradas *(solo médico y administrador)* |
+| 1.6 | Pacientes con datos incompletos |
+| 1.7 | Pacientes sin visitas recientes |
+| 2.1 | Agenda de citas por período |
+| 2.2 | Citas por estado |
+| 2.3 | Citas canceladas |
+| 2.4 | Citas por canal de solicitud |
+| 2.5 | Puntualidad y tiempo en sala de espera |
+| 2.6 | Demanda por día de la semana |
+| 3.1 | Consultas realizadas por período |
+| 3.2 | Diagnósticos más frecuentes |
+| 3.3 | Consultas por tipo de servicio |
+| 3.4 | Pacientes más frecuentes |
+| 3.5 | Recetas emitidas |
+| 3.6 | Medicamentos más recetados |
+| 4.1 | Inventario valorizado |
+| 4.2 | Medicamentos con stock bajo o agotados |
+| 4.3 | Medicamentos vencidos o por vencer |
+| 4.4 | Movimientos de inventario (Kardex) |
+| 4.5 | Efectividad de dispensación |
+| 4.6 | Cobertura de ARS en farmacia |
+| 5.1 | Ingresos diarios (cuadre de caja) |
+| 5.2 | Facturación por ARS (monto a reclamar) |
+| 5.3 | Cuentas por cobrar a pacientes |
+| 5.4 | Tarifarios y coberturas por ARS |
+| 5.5 | Comprobantes fiscales electrónicos (e-CF) |
+| 5.6 | Pagos en línea con PayPal |
+| 6.1 | Resumen general del consultorio |
+| 6.2 | Ingresos mensuales (últimos 12 meses) |
+| 6.3 | Usuarios del sistema |
+| 6.4 | Usuarios por rol |
+| 6.5 | Actividad de facturación por usuario |
+| 6.6 | Catálogo de servicios y su uso |
+
+</details>
+
+**Acceso por rol** (cada rol ve al menos 6 reportes en cada uno de sus módulos):
+
+| Rol | Módulos de reportes | Reportes |
+| :--- | :--- | :-: |
+| Administrador | Los 6 módulos | 37 |
+| Secretaría / Recepción | Pacientes (6), Citas (6), ARS y Facturación (6) | 18 |
+| Médico | Pacientes (7), Citas (6), Consultas y Recetas (6) | 19 |
+| Farmacia | Farmacia e Inventario (6) | 6 |
+
+El médico no ve montos de cobro en sus reportes, y los datos clínicos (alergias) no se muestran a secretaría.
+
+---
+
 ## 🔐 Control de Acceso por Roles (RBAC) e Inicio de Sesión Obligatorio
 
 El sistema implementa **inicio de sesión obligatorio**. Sin una sesión activa, cualquier intento de ingresar al panel, ver pacientes o abrir módulos internos redirige automáticamente a `/login`.

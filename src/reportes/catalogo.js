@@ -222,6 +222,41 @@ const REPORTES = [
     },
   },
   {
+    id: 'pacientes-datos-incompletos',
+    modulo: 'pacientes',
+    titulo: 'Pacientes con datos incompletos',
+    descripcion: 'Fichas a las que les falta correo, dirección, ARS o número de afiliado (para completarlas en recepción).',
+    icono: 'bi-person-exclamation',
+    filtros: [],
+    columnas: [
+      { clave: 'identificacion', etiqueta: 'Identificación' },
+      { clave: 'paciente', etiqueta: 'Paciente' },
+      { clave: 'telefono', etiqueta: 'Teléfono' },
+      { clave: 'faltantes', etiqueta: 'Datos faltantes' },
+      { clave: 'cantidad', etiqueta: 'Cantidad faltante', tipo: 'numero', total: 'suma' },
+    ],
+    consulta() {
+      // ARS "privado/sin seguro" no necesita número de afiliado
+      const sinAfiliado = `p.ars_id IS NOT NULL AND a.codigo <> 'PRIV' AND NULLIF(TRIM(p.numero_afiliado), '') IS NULL`;
+      const faltas = [
+        [`NULLIF(TRIM(p.correo), '') IS NULL`, 'Correo'],
+        [`NULLIF(TRIM(p.direccion), '') IS NULL`, 'Dirección'],
+        [`p.ars_id IS NULL`, 'ARS'],
+        [sinAfiliado, 'No. de afiliado'],
+      ];
+      return {
+        sql: `SELECT * FROM (
+                SELECT p.identificacion, ${NOMBRE_PACIENTE} AS paciente, p.telefono, p.apellido, p.nombre,
+                       CONCAT_WS(', ', ${faltas.map(([c, t]) => `CASE WHEN ${c} THEN '${t}' END`).join(', ')}) AS faltantes,
+                       (${faltas.map(([c]) => `(CASE WHEN ${c} THEN 1 ELSE 0 END)`).join(' + ')}) AS cantidad
+                FROM pacientes p LEFT JOIN ars a ON a.id = p.ars_id
+                WHERE p.activo = true
+              ) t WHERE t.cantidad > 0 ORDER BY t.cantidad DESC, t.apellido, t.nombre`,
+        params: [],
+      };
+    },
+  },
+  {
     id: 'pacientes-sin-visita',
     modulo: 'pacientes',
     titulo: 'Pacientes sin visitas recientes',

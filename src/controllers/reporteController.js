@@ -126,6 +126,9 @@ exports.index = (req, res) => {
     title: 'Reportes - Consultorio Médico San Rafael',
     modulos,
     totalReportes: modulos.reduce((n, m) => n + m.reportes.length, 0),
+    totalSistema: REPORTES.length,
+    modulosSistema: MODULOS.length,
+    esAdmin: rol === 'ADMINISTRADOR',
   });
 };
 

@@ -6,9 +6,24 @@
       <i class="bi bi-file-earmark-bar-graph text-teal me-2"></i>Centro de Reportes
     </h1>
     <p class="text-muted mb-0">
-      <%= totalReportes %> reportes disponibles para su rol. Cada uno se puede filtrar, imprimir (o guardar en PDF) y exportar a Excel.
+      <% if (esAdmin) { %>
+        <%= totalSistema %> reportes organizados en <%= modulosSistema %> módulos (mínimo 6 por módulo).
+      <% } else { %>
+        <%= totalReportes %> reportes disponibles para su rol.
+      <% } %>
+      Cada uno se puede filtrar, imprimir (o guardar en PDF) y exportar a Excel.
     </p>
   </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <% modulos.forEach(function(m) { %>
+    <span class="badge bg-white text-dark border fw-normal py-2 px-3 fs-7">
+      <i class="bi <%= m.icono %> text-<%= m.color %> me-1"></i><%= m.reportes[0].codigo.split('.')[0] %>. <%= m.nombre %>:
+      <strong><%= m.reportes.length %></strong>
+    </span>
+  <% }); %>
+  <span class="badge bg-teal py-2 px-3 fs-7">Total: <%= totalReportes %> reportes</span>
 </div>
 
 <% if (modulos.length === 0) { %>
