@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { liquidarArs } = require('../../public/js/liquidacion-ars');
 const imecfService = require('../services/imecfService');
 const ecfController = require('./ecfController');
 
@@ -341,16 +342,15 @@ exports.guardar = async (req, res, next) => {
         );
         if (tRows.length > 0) {
           const t = tRows[0];
-          finalValorTotal = parseFloat(t.tarifa_pactada) || precioBase;
-          const valCob = parseFloat(t.valor_cobertura) || 0;
-          const copagoFijo = parseFloat(t.copago_fijo) || 0;
-
-          if (t.tipo_cobertura === 'PORCENTAJE') {
-            finalValorCubierto = (finalValorTotal * valCob) / 100.0;
-          } else {
-            finalValorCubierto = Math.min(finalValorTotal, valCob);
-          }
-          finalDiferenciaPaciente = Math.max(0, finalValorTotal - finalValorCubierto + copagoFijo);
+          const liq = liquidarArs({
+            valorTotal: parseFloat(t.tarifa_pactada) || precioBase,
+            tipoCobertura: t.tipo_cobertura,
+            valorCobertura: t.valor_cobertura,
+            copagoFijo: t.copago_fijo,
+          });
+          finalValorTotal = liq.valorTotal;
+          finalValorCubierto = liq.valorCubierto;
+          finalDiferenciaPaciente = liq.diferenciaPaciente;
         }
       }
     }
@@ -366,9 +366,11 @@ exports.guardar = async (req, res, next) => {
       if (valor_cubierto_ars !== undefined && !isNaN(parseFloat(valor_cubierto_ars))) {
         finalValorCubierto = parseFloat(valor_cubierto_ars);
       }
-      if (diferencia_paciente !== undefined && !isNaN(parseFloat(diferencia_paciente))) {
-        finalDiferenciaPaciente = parseFloat(diferencia_paciente);
-      }
+      // Regla de cuadre: lo del paciente es siempre Facturado − ARS (diferencia_paciente del formulario
+      // no se toma tal cual: así nunca quedan montos que no sumen).
+      finalValorTotal = Math.max(0, Math.round(finalValorTotal * 100) / 100);
+      finalValorCubierto = Math.min(Math.max(0, Math.round(finalValorCubierto * 100) / 100), finalValorTotal);
+      finalDiferenciaPaciente = Math.round((finalValorTotal - finalValorCubierto) * 100) / 100;
     }
 
     // 1.4 Médico que atiende: el médico con sesión iniciada. Si registra la consulta el administrador,

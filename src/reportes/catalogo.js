@@ -983,20 +983,23 @@ const REPORTES = [
       { clave: 'tarifa_pactada', etiqueta: 'Tarifa pactada', tipo: 'moneda' },
       { clave: 'cobertura', etiqueta: 'Cobertura' },
       { clave: 'cubre_ars', etiqueta: 'Cubre la ARS', tipo: 'moneda' },
-      { clave: 'copago_fijo', etiqueta: 'Copago fijo', tipo: 'moneda' },
+      { clave: 'copago_fijo', etiqueta: 'Copago mínimo (incluido)', tipo: 'moneda' },
       { clave: 'paga_paciente', etiqueta: 'Paga el paciente', tipo: 'moneda' },
     ],
     consulta(f) {
       const w = new Condiciones().agregar('t.ars_id = ?', f.ars_id);
-      // Misma fórmula que la calculadora de copago (arsController.apiCalcular)
-      const cubre = `CASE WHEN t.tipo_cobertura = 'PORCENTAJE' THEN ROUND(t.tarifa_pactada * t.valor_cobertura / 100.0, 2)
-                          ELSE LEAST(t.tarifa_pactada, t.valor_cobertura) END`;
+      // Misma regla que public/js/liquidacion-ars.js: el copago fijo es el mínimo que paga el paciente
+      // (va incluido), así que Tarifa = Cubre la ARS + Paga el paciente.
+      const cubre = `LEAST(
+                       CASE WHEN t.tipo_cobertura = 'PORCENTAJE' THEN ROUND(t.tarifa_pactada * LEAST(t.valor_cobertura, 100) / 100.0, 2)
+                            ELSE LEAST(t.tarifa_pactada, t.valor_cobertura) END,
+                       GREATEST(t.tarifa_pactada - t.copago_fijo, 0))`;
       return {
         sql: `SELECT a.nombre AS ars, s.nombre AS servicio, s.precio_base, t.tarifa_pactada,
                      CASE WHEN t.tipo_cobertura = 'PORCENTAJE' THEN t.valor_cobertura || '%'
                           ELSE 'Fijo RD$ ' || t.valor_cobertura END AS cobertura,
                      ${cubre} AS cubre_ars, t.copago_fijo,
-                     GREATEST(0, t.tarifa_pactada - ${cubre} + t.copago_fijo) AS paga_paciente
+                     t.tarifa_pactada - ${cubre} AS paga_paciente
               FROM ars_tarifarios t
               INNER JOIN ars a ON a.id = t.ars_id
               INNER JOIN servicios s ON s.id = t.servicio_id

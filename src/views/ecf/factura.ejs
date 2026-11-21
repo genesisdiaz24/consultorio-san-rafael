@@ -273,16 +273,15 @@ function recalcularLiquidacionFactura() {
   const tarifaMatch = tarifariosFacturaConfigurados.find(t => t.ars_id === arsId && t.servicio_id === servicioId);
 
   if (tarifaMatch) {
-    valorTotal = parseFloat(tarifaMatch.tarifa_pactada) || precioBase;
-    const valorCob = parseFloat(tarifaMatch.valor_cobertura) || 0;
-    const copagoFijo = parseFloat(tarifaMatch.copago_fijo) || 0;
-
-    if (tarifaMatch.tipo_cobertura === 'PORCENTAJE') {
-      valorCubierto = (valorTotal * valorCob) / 100.0;
-    } else {
-      valorCubierto = Math.min(valorTotal, valorCob);
-    }
-    copago = Math.max(0, valorTotal - valorCubierto + copagoFijo);
+    const liq = liquidarArs({
+      valorTotal: parseFloat(tarifaMatch.tarifa_pactada) || precioBase,
+      tipoCobertura: tarifaMatch.tipo_cobertura,
+      valorCobertura: tarifaMatch.valor_cobertura,
+      copagoFijo: tarifaMatch.copago_fijo,
+    });
+    valorTotal = liq.valorTotal;
+    valorCubierto = liq.valorCubierto;
+    copago = liq.diferenciaPaciente;
   }
 
   const dispTotal = document.getElementById('dispFacturaTotal');

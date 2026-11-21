@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { liquidarArs } = require('../../public/js/liquidacion-ars');
 
 // Listar ARS registradas
 exports.listar = async (req, res, next) => {
@@ -340,21 +341,19 @@ exports.apiCalcular = async (req, res) => {
       if (tRows.length > 0) {
         tieneTarifario = true;
         const tarifa = tRows[0];
-        valorTotal = parseFloat(tarifa.tarifa_pactada);
-        const valorCob = parseFloat(tarifa.valor_cobertura);
-        const copagoFijo = parseFloat(tarifa.copago_fijo) || 0.00;
-
-        if (tarifa.tipo_cobertura === 'PORCENTAJE') {
-          // Cobertura calculada por porcentaje
-          valorCubierto = (valorTotal * valorCob) / 100.0;
-          diferenciaPaciente = Math.max(0, valorTotal - valorCubierto + copagoFijo);
-          reglaAplicada = `Tarifa ARS: RD$ ${valorTotal.toFixed(2)} | Cobertura ${valorCob}% (-RD$ ${valorCubierto.toFixed(2)}) + Copago RD$ ${copagoFijo.toFixed(2)}`;
-        } else {
-          // Cobertura calculada por monto fijo
-          valorCubierto = Math.min(valorTotal, valorCob);
-          diferenciaPaciente = Math.max(0, valorTotal - valorCubierto + copagoFijo);
-          reglaAplicada = `Tarifa ARS: RD$ ${valorTotal.toFixed(2)} | Cobertura fija (-RD$ ${valorCubierto.toFixed(2)}) + Copago RD$ ${copagoFijo.toFixed(2)}`;
-        }
+        const liq = liquidarArs({
+          valorTotal: tarifa.tarifa_pactada,
+          tipoCobertura: tarifa.tipo_cobertura,
+          valorCobertura: tarifa.valor_cobertura,
+          copagoFijo: tarifa.copago_fijo,
+        });
+        valorTotal = liq.valorTotal;
+        valorCubierto = liq.valorCubierto;
+        diferenciaPaciente = liq.diferenciaPaciente;
+        const copagoFijo = parseFloat(tarifa.copago_fijo) || 0;
+        const cobertura = tarifa.tipo_cobertura === 'PORCENTAJE' ? `Cobertura ${parseFloat(tarifa.valor_cobertura)}%` : 'Cobertura fija';
+        reglaAplicada = `Tarifa ARS: RD$ ${valorTotal.toFixed(2)} | ${cobertura} (-RD$ ${valorCubierto.toFixed(2)}) | Paciente paga RD$ ${diferenciaPaciente.toFixed(2)}` +
+          (copagoFijo > 0 ? ` (copago mínimo RD$ ${copagoFijo.toFixed(2)}, incluido)` : '');
       }
     }
 
@@ -644,16 +643,15 @@ exports.actualizarLiquidacionCobro = async (req, res, next) => {
       );
       if (tRows.length > 0) {
         const t = tRows[0];
-        valorTotal = parseFloat(t.tarifa_pactada) || precioBase;
-        const valCob = parseFloat(t.valor_cobertura) || 0;
-        const copagoFijo = parseFloat(t.copago_fijo) || 0;
-
-        if (t.tipo_cobertura === 'PORCENTAJE') {
-          valorCubierto = (valorTotal * valCob) / 100.0;
-        } else {
-          valorCubierto = Math.min(valorTotal, valCob);
-        }
-        copago = Math.max(0, valorTotal - valorCubierto + copagoFijo);
+        const liq = liquidarArs({
+          valorTotal: parseFloat(t.tarifa_pactada) || precioBase,
+          tipoCobertura: t.tipo_cobertura,
+          valorCobertura: t.valor_cobertura,
+          copagoFijo: t.copago_fijo,
+        });
+        valorTotal = liq.valorTotal;
+        valorCubierto = liq.valorCubierto;
+        copago = liq.diferenciaPaciente;
       }
     }
 

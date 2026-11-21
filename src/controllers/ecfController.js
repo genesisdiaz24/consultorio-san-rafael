@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { liquidarArs } = require('../../public/js/liquidacion-ars');
 const imecfService = require('../services/imecfService');
 const emailService = require('../services/emailService');
 
@@ -302,14 +303,34 @@ exports.registrarCobro = async (req, res, next) => {
       return res.redirect(urlRetorno);
     }
 
-    const metodoPago = String(req.body?.metodo_pago || 'Efectivo').trim();
+    // Mismos nombres de método que el cobro de Secretaría (se aceptan también las formas cortas)
+    const METODOS = {
+      Efectivo: 'Efectivo',
+      Tarjeta: 'Tarjeta de Débito / Crédito',
+      'Tarjeta de Débito / Crédito': 'Tarjeta de Débito / Crédito',
+      Transferencia: 'Transferencia Bancaria',
+      'Transferencia Bancaria': 'Transferencia Bancaria',
+    };
+    const metodoPago = METODOS[String(req.body?.metodo_pago || 'Efectivo').trim()];
+    if (!metodoPago) {
+      const msg = 'Método de pago inválido. Use Efectivo, Tarjeta o Transferencia.';
+      if (esJsonRequest) return res.status(400).json({ success: false, error: msg });
+      req.flash('error', msg);
+      return res.redirect(urlRetorno);
+    }
     const { rows: updated } = await db.query(
       `UPDATE consultas
-       SET estado_pago = 'Pagado'
-       WHERE id = $1
+       SET estado_pago = 'Pagado', metodo_pago = $2, fecha_pago = CURRENT_TIMESTAMP
+       WHERE id = $1 AND estado_pago <> 'Pagado'
        RETURNING id, valor_total, valor_cubierto_ars, diferencia_paciente, estado_pago`,
-      [consultaId]
+      [consultaId, metodoPago]
     );
+    if (updated.length === 0) {
+      const msg = 'Esta consulta ya ha sido pagada previamente. No se permiten cobros duplicados.';
+      if (esJsonRequest) return res.status(409).json({ success: false, error: msg });
+      req.flash('warning', msg);
+      return res.redirect(urlRetorno);
+    }
 
     const msg = `Cobro de la factura #${consultaId} registrado exitosamente (${metodoPago}). Ya puede emitir el comprobante electrónico e-CF a través de IMECF.`;
     if (esJsonRequest) {
@@ -393,16 +414,15 @@ exports.actualizarLiquidacion = async (req, res, next) => {
       );
       if (tRows.length > 0) {
         const t = tRows[0];
-        valorTotal = parseFloat(t.tarifa_pactada) || precioBase;
-        const valCob = parseFloat(t.valor_cobertura) || 0;
-        const copagoFijo = parseFloat(t.copago_fijo) || 0;
-
-        if (t.tipo_cobertura === 'PORCENTAJE') {
-          valorCubierto = (valorTotal * valCob) / 100.0;
-        } else {
-          valorCubierto = Math.min(valorTotal, valCob);
-        }
-        copago = Math.max(0, valorTotal - valorCubierto + copagoFijo);
+        const liq = liquidarArs({
+          valorTotal: parseFloat(t.tarifa_pactada) || precioBase,
+          tipoCobertura: t.tipo_cobertura,
+          valorCobertura: t.valor_cobertura,
+          copagoFijo: t.copago_fijo,
+        });
+        valorTotal = liq.valorTotal;
+        valorCubierto = liq.valorCubierto;
+        copago = liq.diferenciaPaciente;
       }
     }
 

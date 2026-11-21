@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const { helmetConfig, corsConfig, csrfMiddleware } = require('./middleware/security');
 const { verificarInactividad, requiereAutenticacion } = require('./middleware/auth');
+const { liquidarArs } = require('../public/js/liquidacion-ars');
 
 const app = express();
 const esProduccion = process.env.NODE_ENV === 'production';
@@ -119,6 +120,9 @@ app.use((req, res, next) => {
     const num = parseFloat(monto) || 0;
     return 'RD$ ' + num.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+
+  // Regla única de liquidación ARS (para cálculos dentro de las plantillas)
+  res.locals.liquidarArs = liquidarArs;
 
   // Helper para formatear fechas
   res.locals.formatoFecha = (fecha) => {

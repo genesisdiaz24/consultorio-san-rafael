@@ -139,7 +139,9 @@ CREATE TABLE IF NOT EXISTS consultas (
     metodo_pago VARCHAR(40) CONSTRAINT chk_consultas_metodo_pago
         CHECK (metodo_pago IS NULL OR metodo_pago IN ('Efectivo', 'Tarjeta de Débito / Crédito', 'Transferencia Bancaria', 'PayPal')),
     fecha_pago TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Facturado = Cubierto por la ARS + Paciente (el copago fijo va incluido en lo del paciente)
+    CONSTRAINT chk_consultas_cuadre CHECK (valor_total = valor_cubierto_ars + diferencia_paciente)
 );
 
 -- 8. TABLA DE RECETAS MÉDICAS

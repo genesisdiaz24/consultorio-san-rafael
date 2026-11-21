@@ -137,6 +137,25 @@ const MIGRACIONES = [
       END $$;
     `,
   },
+  {
+    nombre: '2026-11-cuadre-facturado-ars-paciente',
+    sql: `
+      -- Regla: Facturado = Cubierto por la ARS + Paciente. Antes el copago fijo del tarifario se cobraba
+      -- ENCIMA de la parte no cubierta y el paciente quedaba debiendo más de lo facturado.
+      -- Se conserva lo que cubre la ARS y se recalcula lo del paciente.
+      UPDATE consultas SET valor_cubierto_ars = valor_total WHERE valor_cubierto_ars > valor_total;
+      UPDATE consultas SET diferencia_paciente = valor_total - valor_cubierto_ars
+      WHERE diferencia_paciente <> valor_total - valor_cubierto_ars;
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_consultas_cuadre') THEN
+          ALTER TABLE consultas ADD CONSTRAINT chk_consultas_cuadre
+            CHECK (valor_total = valor_cubierto_ars + diferencia_paciente);
+        END IF;
+      END $$;
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {

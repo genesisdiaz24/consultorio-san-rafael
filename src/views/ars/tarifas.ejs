@@ -44,17 +44,14 @@
               <% if (tarifas && tarifas.length > 0) { %>
                 <% tarifas.forEach(function(t) { %>
                   <% 
-                    let coberturaCalculada = 0;
-                    let tarifaNum = parseFloat(t.tarifa_pactada);
-                    let valCobNum = parseFloat(t.valor_cobertura);
-                    let copagoFijo = parseFloat(t.copago_fijo) || 0;
-
-                    if (t.tipo_cobertura === 'PORCENTAJE') {
-                      coberturaCalculada = (tarifaNum * valCobNum) / 100;
-                    } else {
-                      coberturaCalculada = Math.min(tarifaNum, valCobNum);
-                    }
-                    let copagoPaciente = Math.max(0, tarifaNum - coberturaCalculada + copagoFijo);
+                    const liq = liquidarArs({
+                      valorTotal: t.tarifa_pactada,
+                      tipoCobertura: t.tipo_cobertura,
+                      valorCobertura: t.valor_cobertura,
+                      copagoFijo: t.copago_fijo,
+                    });
+                    let coberturaCalculada = liq.valorCubierto;
+                    let copagoPaciente = liq.diferenciaPaciente;
                   %>
                   <tr>
                     <td>
@@ -79,7 +76,7 @@
                     <td>
                       <strong class="text-danger"><%= formatoMoneda(copagoPaciente) %></strong>
                       <% if (t.copago_fijo > 0) { %>
-                        <small class="d-block text-muted fs-8">Incluye copago fijo <%= formatoMoneda(t.copago_fijo) %></small>
+                        <small class="d-block text-muted fs-8">Copago mínimo <%= formatoMoneda(t.copago_fijo) %> (incluido)</small>
                       <% } %>
                     </td>
                     <% if (esAdminArs) { %>
@@ -224,14 +221,9 @@ function calcularPrevisualizacion() {
   const valorCob = parseFloat(document.getElementById('valor_cobertura').value) || 0;
   const copagoFijo = parseFloat(document.getElementById('copago_fijo').value) || 0;
 
-  let cubierto = 0;
-  if (tipo === 'PORCENTAJE') {
-    cubierto = (tarifa * valorCob) / 100.0;
-  } else {
-    cubierto = Math.min(tarifa, valorCob);
-  }
-
-  const copago = Math.max(0, tarifa - cubierto + copagoFijo);
+  const liq = liquidarArs({ valorTotal: tarifa, tipoCobertura: tipo, valorCobertura: valorCob, copagoFijo });
+  const cubierto = liq.valorCubierto;
+  const copago = liq.diferenciaPaciente;
 
   document.getElementById('prevCubierto').innerText = 'RD$ ' + cubierto.toLocaleString('es-DO', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   document.getElementById('prevCopago').innerText = 'RD$ ' + copago.toLocaleString('es-DO', {minimumFractionDigits: 2, maximumFractionDigits: 2});

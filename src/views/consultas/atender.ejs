@@ -419,18 +419,19 @@ function recalcularCobro() {
   const tarifaMatch = tarifariosConfigurados.find(t => t.ars_id === arsId && t.servicio_id === servicioId);
 
   if (tarifaMatch) {
-    valorTotal = parseFloat(tarifaMatch.tarifa_pactada);
     const valorCob = parseFloat(tarifaMatch.valor_cobertura);
-    const copagoFijo = parseFloat(tarifaMatch.copago_fijo) || 0;
-
-    if (tarifaMatch.tipo_cobertura === 'PORCENTAJE') {
-      valorCubierto = (valorTotal * valorCob) / 100.0;
-      reglaTexto = `${valorCob}% cubierto por ARS`;
-    } else {
-      valorCubierto = Math.min(valorTotal, valorCob);
-      reglaTexto = `Monto fijo cubierto: RD$ ${valorCob.toFixed(2)}`;
-    }
-    copago = Math.max(0, valorTotal - valorCubierto + copagoFijo);
+    const liq = liquidarArs({
+      valorTotal: tarifaMatch.tarifa_pactada,
+      tipoCobertura: tarifaMatch.tipo_cobertura,
+      valorCobertura: tarifaMatch.valor_cobertura,
+      copagoFijo: tarifaMatch.copago_fijo,
+    });
+    valorTotal = liq.valorTotal;
+    valorCubierto = liq.valorCubierto;
+    copago = liq.diferenciaPaciente;
+    reglaTexto = tarifaMatch.tipo_cobertura === 'PORCENTAJE'
+      ? `${valorCob}% cubierto por ARS`
+      : `Monto fijo cubierto: RD$ ${valorCob.toFixed(2)}`;
   } else {
     copago = valorTotal;
   }

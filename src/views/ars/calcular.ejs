@@ -113,20 +113,26 @@ function ejecutarSimulacion() {
   if (arsId > 0) {
     const tarifa = todosLosTarifarios.find(t => t.ars_id === arsId && t.servicio_id === servId);
     if (tarifa) {
-      total = parseFloat(tarifa.tarifa_pactada);
       const valCob = parseFloat(tarifa.valor_cobertura);
       const copagoFijo = parseFloat(tarifa.copago_fijo) || 0;
+      const liq = liquidarArs({
+        valorTotal: tarifa.tarifa_pactada,
+        tipoCobertura: tarifa.tipo_cobertura,
+        valorCobertura: tarifa.valor_cobertura,
+        copagoFijo: tarifa.copago_fijo,
+      });
+      total = liq.valorTotal;
+      cubierto = liq.valorCubierto;
+      copago = liq.diferenciaPaciente;
+      const notaCopago = copagoFijo > 0 ? ` Copago mínimo del paciente: RD$ ${copagoFijo.toFixed(2)} (incluido).` : '';
 
       if (tarifa.tipo_cobertura === 'PORCENTAJE') {
-        cubierto = (total * valCob) / 100.0;
         detallePorc = `${valCob}% de cobertura`;
-        regla = `Convenio encontrado: Cobertura del ${valCob}% sobre tarifa pactada de RD$ ${total.toFixed(2)}. ${copagoFijo > 0 ? 'Incluye copago fijo de RD$ ' + copagoFijo.toFixed(2) : ''}`;
+        regla = `Convenio encontrado: Cobertura del ${valCob}% sobre tarifa pactada de RD$ ${total.toFixed(2)}.${notaCopago}`;
       } else {
-        cubierto = Math.min(total, valCob);
         detallePorc = `Monto fijo cubierto`;
-        regla = `Convenio encontrado: Cobertura fija de RD$ ${valCob.toFixed(2)} sobre tarifa pactada de RD$ ${total.toFixed(2)}.`;
+        regla = `Convenio encontrado: Cobertura fija de RD$ ${valCob.toFixed(2)} sobre tarifa pactada de RD$ ${total.toFixed(2)}.${notaCopago}`;
       }
-      copago = Math.max(0, total - cubierto + copagoFijo);
     } else {
       regla = 'La aseguradora seleccionada no tiene tarifario específico para este servicio. Se aplica tarifa base con 0% de cobertura.';
     }
