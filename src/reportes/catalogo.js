@@ -767,28 +767,47 @@ const REPORTES = [
     id: 'farmacia-cobertura-ars',
     modulo: 'farmacia',
     titulo: 'Cobertura de ARS en farmacia',
-    descripcion: 'Medicamentos entregados: cuánto cubrió cada ARS y cuánto pagó el paciente.',
+    descripcion: 'Qué ARS cubre cada medicamento y con qué porcentaje, cuánto paga cada parte por unidad y lo ya entregado con cobertura.',
     icono: 'bi-shield-plus',
-    filtros: [...RANGO_FECHAS],
+    filtros: [FILTRO_ARS, ...RANGO_FECHAS],
     columnas: [
       { clave: 'ars', etiqueta: 'ARS' },
-      { clave: 'items', etiqueta: 'Entregas', tipo: 'numero', total: 'suma' },
-      { clave: 'monto_total', etiqueta: 'Monto total', tipo: 'moneda', total: 'suma' },
-      { clave: 'cubierto_ars', etiqueta: 'Cubierto por ARS', tipo: 'moneda', total: 'suma' },
-      { clave: 'pagado_paciente', etiqueta: 'Pagado por paciente', tipo: 'moneda', total: 'suma' },
-      { clave: 'pct_cubierto', etiqueta: '% cubierto', tipo: 'porcentaje' },
+      { clave: 'medicamento', etiqueta: 'Medicamento' },
+      { clave: 'precio_unitario', etiqueta: 'Precio unitario', tipo: 'moneda' },
+      { clave: 'porcentaje', etiqueta: '% cobertura', tipo: 'porcentaje', total: 'promedio' },
+      { clave: 'cubre_ars', etiqueta: 'Cubre la ARS (unidad)', tipo: 'moneda' },
+      { clave: 'paga_paciente', etiqueta: 'Paga el paciente (unidad)', tipo: 'moneda' },
+      { clave: 'entregas', etiqueta: 'Entregas con cobertura', tipo: 'numero', total: 'suma' },
+      { clave: 'cubierto_entregado', etiqueta: 'Cubierto por ARS (entregado)', tipo: 'moneda', total: 'suma' },
+      { clave: 'pagado_paciente', etiqueta: 'Pagado por pacientes (entregado)', tipo: 'moneda', total: 'suma' },
     ],
-    grafico: { etiqueta: 'ars', valor: 'cubierto_ars' },
+    grafico: { etiqueta: 'medicamento_ars', valor: 'porcentaje' },
     consulta(f) {
-      const w = new Condiciones().fijo(`rd.estado_dispensacion = 'Entregado'`).rango('rd.fecha_dispensacion', f);
+      // Las fechas filtran solo las entregas; el ARS filtra las coberturas configuradas
+      const entregas = new Condiciones().fijo(`rd.estado_dispensacion = 'Entregado'`).rango('rd.fecha_dispensacion', f);
+      const params = [...entregas.params, f.ars_id || null];
+      const pArs = `$${params.length}`;
+      // Misma fórmula que coberturaFarmaciaService.calcularCobertura
+      const cubre = `ROUND(m.precio_unitario * LEAST(mc.porcentaje_cobertura, 100) / 100.0, 2)`;
       return {
-        sql: `SELECT COALESCE(rd.ars_cobertura_nombre, 'Sin cobertura ARS') AS ars, COUNT(*)::int AS items,
-                     COALESCE(SUM(rd.monto_total), 0) AS monto_total, COALESCE(SUM(rd.monto_cubierto_ars), 0) AS cubierto_ars,
-                     COALESCE(SUM(rd.monto_paciente), 0) AS pagado_paciente,
-                     ROUND(100.0 * COALESCE(SUM(rd.monto_cubierto_ars), 0) / NULLIF(SUM(rd.monto_total), 0), 1) AS pct_cubierto
-              FROM receta_detalles rd
-              ${w.where()} GROUP BY COALESCE(rd.ars_cobertura_nombre, 'Sin cobertura ARS') ORDER BY cubierto_ars DESC`,
-        params: w.params,
+        sql: `SELECT a.nombre AS ars, m.nombre || COALESCE(' ' || m.concentracion, '') AS medicamento,
+                     m.nombre || ' (' || a.nombre || ')' AS medicamento_ars,
+                     m.precio_unitario, mc.porcentaje_cobertura AS porcentaje,
+                     ${cubre} AS cubre_ars, m.precio_unitario - ${cubre} AS paga_paciente,
+                     COALESCE(e.entregas, 0)::int AS entregas, COALESCE(e.cubierto, 0) AS cubierto_entregado,
+                     COALESCE(e.paciente, 0) AS pagado_paciente
+              FROM medicamento_coberturas_ars mc
+              INNER JOIN medicamentos m ON m.id = mc.medicamento_id
+              INNER JOIN ars a ON a.id = mc.ars_id
+              LEFT JOIN (
+                SELECT rd.medicamento_id, rd.ars_cobertura_id, COUNT(*) AS entregas,
+                       SUM(rd.monto_cubierto_ars) AS cubierto, SUM(rd.monto_paciente) AS paciente
+                FROM receta_detalles rd ${entregas.where()}
+                GROUP BY rd.medicamento_id, rd.ars_cobertura_id
+              ) e ON e.medicamento_id = m.id AND e.ars_cobertura_id = a.id
+              WHERE mc.activo = true AND m.activo = true AND (${pArs}::int IS NULL OR mc.ars_id = ${pArs}::int)
+              ORDER BY a.nombre, mc.porcentaje_cobertura DESC, m.nombre`,
+        params,
       };
     },
   },
