@@ -169,6 +169,7 @@ const farmaciaRoutes = require('./routes/farmaciaRoutes');
 const arsRoutes = require('./routes/arsRoutes');
 const ecfRoutes = require('./routes/ecfRoutes');
 const paypalRoutes = require('./routes/paypalRoutes');
+const reporteRoutes = require('./routes/reporteRoutes');
 
 app.use('/', indexRoutes);
 app.use('/usuarios', usuarioRoutes);
@@ -179,6 +180,7 @@ app.use('/farmacia', farmaciaRoutes);
 app.use('/ars', arsRoutes);
 app.use('/ecf', ecfRoutes);
 app.use('/pagos/paypal', paypalRoutes);
+app.use('/reportes', reporteRoutes);
 
 // 13. Manejo de Ruta No Encontrada (404)
 app.use((req, res) => {

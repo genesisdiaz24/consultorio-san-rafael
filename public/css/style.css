@@ -250,3 +250,20 @@ footer {
   }
 }
 
+
+/* Reportes: conservar colores de las barras y no cortar tablas al imprimir */
+@media print {
+  .progress, .progress-bar, .table-light {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .table-responsive {
+    overflow: visible !important;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+}
