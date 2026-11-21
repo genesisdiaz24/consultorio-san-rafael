@@ -47,6 +47,14 @@ const L = (col) => `((${col})::timestamptz AT TIME ZONE 'America/Santo_Domingo')
 const HOY = `(NOW() AT TIME ZONE 'America/Santo_Domingo')::date`;
 const MES_HOY = `DATE_TRUNC('month', ${HOY})`;
 
+// Fecha (YYYY-MM-DD) de hace N días en hora de RD; se usa como valor por defecto de filtros
+function haceDias(n) {
+  const hoyRd = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
+  const d = new Date(`${hoyRd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
 const RANGO_FECHAS = [
   { nombre: 'desde', etiqueta: 'Desde', tipo: 'fecha' },
   { nombre: 'hasta', etiqueta: 'Hasta', tipo: 'fecha' },
@@ -743,10 +751,11 @@ const REPORTES = [
     id: 'farmacia-movimientos',
     modulo: 'farmacia',
     titulo: 'Movimientos de inventario (Kardex)',
-    descripcion: 'Entradas, salidas por receta, ajustes y no entregas, con stock antes y después.',
+    descripcion: 'Entradas, salidas por receta, ajustes y no entregas, con stock antes y después. Por defecto, los últimos 30 días.',
     icono: 'bi-arrow-left-right',
     filtros: [
-      ...RANGO_FECHAS,
+      { nombre: 'desde', etiqueta: 'Desde', tipo: 'fecha', defecto: () => haceDias(30) },
+      { nombre: 'hasta', etiqueta: 'Hasta', tipo: 'fecha' },
       { nombre: 'tipo', etiqueta: 'Tipo', tipo: 'select', opciones: ['SALIDA_RECETA', 'ENTRADA_STOCK', 'AJUSTE', 'NO_ENTREGADO', 'NO_ENTREGADO_SIN_STOCK'] },
     ],
     columnas: [

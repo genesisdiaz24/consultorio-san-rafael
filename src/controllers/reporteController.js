@@ -47,7 +47,8 @@ async function prepararFiltros(reporte, query) {
       }
     }
 
-    const crudo = Object.prototype.hasOwnProperty.call(query, filtro.nombre) ? query[filtro.nombre] : filtro.defecto;
+    const defecto = typeof filtro.defecto === 'function' ? filtro.defecto() : filtro.defecto;
+    const crudo = Object.prototype.hasOwnProperty.call(query, filtro.nombre) ? query[filtro.nombre] : defecto;
     const valor = typeof crudo === 'string' ? crudo.trim() : '';
     let aceptado = '';
 
