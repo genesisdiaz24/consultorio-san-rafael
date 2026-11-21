@@ -193,6 +193,8 @@ const REPORTES = [
     titulo: 'Pacientes con alergias registradas',
     descripcion: 'Pacientes que tienen antecedentes alérgicos anotados en su ficha (alerta clínica).',
     icono: 'bi-exclamation-triangle',
+    // Información clínica: solo el médico (y el administrador), aunque el módulo lo vea también secretaría
+    roles: ['MEDICO'],
     filtros: [],
     columnas: [
       { clave: 'identificacion', etiqueta: 'Identificación' },
@@ -1212,11 +1214,12 @@ function modulo(id) {
   return MODULOS.find((m) => m.id === id);
 }
 
-// ADMINISTRADOR ve todo; los demás roles ven los módulos que les corresponden
+// ADMINISTRADOR ve todo; los demás roles ven los módulos que les corresponden.
+// Un reporte puede restringirse más con su propia lista "roles" (p. ej. datos clínicos solo para el médico).
 function puedeVer(rol, reporte) {
   if (rol === 'ADMINISTRADOR') return true;
-  const m = modulo(reporte.modulo);
-  return Boolean(m && m.roles.includes(rol));
+  const roles = reporte.roles || (modulo(reporte.modulo) || {}).roles || [];
+  return roles.includes(rol);
 }
 
 module.exports = { MODULOS, REPORTES, POR_ID, modulo, puedeVer };
