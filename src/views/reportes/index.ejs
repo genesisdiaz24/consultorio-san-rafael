@@ -21,7 +21,7 @@
       <div class="card border-0 shadow-sm h-100">
         <div class="card-header bg-white border-0 pt-3 pb-2 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">
-            <i class="bi <%= m.icono %> text-<%= m.color %> me-2"></i><%= m.nombre %>
+            <i class="bi <%= m.icono %> text-<%= m.color %> me-2"></i><%= m.reportes[0].codigo.split('.')[0] %>. <%= m.nombre %>
           </h2>
           <span class="badge bg-light text-dark border"><%= m.reportes.length %> reportes</span>
         </div>
@@ -30,7 +30,7 @@
             <a href="/reportes/<%= r.id %>" class="list-group-item list-group-item-action d-flex gap-3 align-items-start py-3">
               <i class="bi <%= r.icono %> fs-5 text-<%= m.color %> mt-1"></i>
               <span>
-                <span class="fw-semibold text-dark d-block"><%= r.titulo %></span>
+                <span class="fw-semibold text-dark d-block"><span class="text-muted fw-normal me-1"><%= r.codigo %></span><%= r.titulo %></span>
                 <small class="text-muted"><%= r.descripcion %></small>
               </span>
             </a>

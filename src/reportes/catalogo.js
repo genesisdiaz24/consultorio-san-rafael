@@ -41,6 +41,12 @@ class Condiciones {
   }
 }
 
+// Zona horaria del consultorio. Cloud SQL guarda CURRENT_TIMESTAMP en UTC: todo timestamp se
+// convierte a hora de República Dominicana antes de mostrarlo, agruparlo por día o filtrarlo.
+const L = (col) => `((${col})::timestamptz AT TIME ZONE 'America/Santo_Domingo')`;
+const HOY = `(NOW() AT TIME ZONE 'America/Santo_Domingo')::date`;
+const MES_HOY = `DATE_TRUNC('month', ${HOY})`;
+
 const RANGO_FECHAS = [
   { nombre: 'desde', etiqueta: 'Desde', tipo: 'fecha' },
   { nombre: 'hasta', etiqueta: 'Hasta', tipo: 'fecha' },
@@ -48,9 +54,6 @@ const RANGO_FECHAS = [
 const FILTRO_ARS = { nombre: 'ars_id', etiqueta: 'ARS', tipo: 'select', fuente: 'ars' };
 const NOMBRE_PACIENTE = `p.nombre || ' ' || p.apellido`;
 const EDAD = `EXTRACT(YEAR FROM AGE(p.fecha_nacimiento))::int`;
-const DIA_SEMANA = `CASE EXTRACT(ISODOW FROM c.fecha)::int
-  WHEN 1 THEN 'Lunes' WHEN 2 THEN 'Martes' WHEN 3 THEN 'Miércoles' WHEN 4 THEN 'Jueves'
-  WHEN 5 THEN 'Viernes' WHEN 6 THEN 'Sábado' ELSE 'Domingo' END`;
 
 const MODULOS = [
   { id: 'pacientes', nombre: 'Pacientes', icono: 'bi-people', color: 'primary', roles: ['SECRETARIA', 'RECEPCION', 'MEDICO'] },
@@ -94,7 +97,7 @@ const REPORTES = [
         .agregar('p.activo = ?', f.estado ? f.estado === 'Activo' : '');
       return {
         sql: `SELECT p.identificacion, ${NOMBRE_PACIENTE} AS paciente, ${EDAD} AS edad, p.genero, p.telefono, p.correo,
-                     COALESCE(a.nombre, 'Sin ARS') AS ars, p.numero_afiliado, p.created_at AS registrado
+                     COALESCE(a.nombre, 'Sin ARS') AS ars, p.numero_afiliado, ${L('p.created_at')} AS registrado
               FROM pacientes p LEFT JOIN ars a ON a.id = p.ars_id
               ${w.where()} ORDER BY p.apellido, p.nombre`,
         params: w.params,
@@ -177,9 +180,9 @@ const REPORTES = [
       { clave: 'ars', etiqueta: 'ARS' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('p.created_at', f).agregar('p.ars_id = ?', f.ars_id);
+      const w = new Condiciones().rango(L('p.created_at'), f).agregar('p.ars_id = ?', f.ars_id);
       return {
-        sql: `SELECT p.created_at AS registrado, p.identificacion, ${NOMBRE_PACIENTE} AS paciente, ${EDAD} AS edad,
+        sql: `SELECT ${L('p.created_at')} AS registrado, p.identificacion, ${NOMBRE_PACIENTE} AS paciente, ${EDAD} AS edad,
                      p.telefono, COALESCE(a.nombre, 'Sin ARS') AS ars
               FROM pacientes p LEFT JOIN ars a ON a.id = p.ars_id
               ${w.where()} ORDER BY p.created_at DESC`,
@@ -211,7 +214,8 @@ const REPORTES = [
               FROM pacientes p
               WHERE p.activo = true
                 AND NULLIF(TRIM(p.antecedentes_alergicos), '') IS NOT NULL
-                AND LOWER(TRIM(p.antecedentes_alergicos)) NOT IN ('ninguna', 'ninguno', 'niega', 'no', 'n/a', 'na', 'no refiere', 'negadas', 'negados')
+                -- Excluye textos que significan "sin alergias": Ninguna (conocida), Niega, No, N/A, Negadas, Sin alergias, Desconoce...
+                AND LOWER(TRIM(p.antecedentes_alergicos)) !~ '^(ningun|niega|negad|no( |$|\\.|,|ref|tiene|conoc|presenta)|n/?a$|sin alerg|desconoc|-+$)'
               ORDER BY p.apellido, p.nombre`,
         params: [],
       };
@@ -231,21 +235,22 @@ const REPORTES = [
       { clave: 'ars', etiqueta: 'ARS' },
       { clave: 'total_consultas', etiqueta: 'Consultas históricas', tipo: 'numero' },
       { clave: 'ultima_consulta', etiqueta: 'Última consulta', tipo: 'fecha' },
-      { clave: 'dias_sin_visita', etiqueta: 'Días sin visita', tipo: 'numero' },
+      { clave: 'dias_sin_visita', etiqueta: 'Tiempo sin visita' },
     ],
     consulta(f) {
       const dias = parseInt(f.dias, 10) || 180;
       return {
         sql: `SELECT ${NOMBRE_PACIENTE} AS paciente, p.identificacion, p.telefono, COALESCE(a.nombre, 'Sin ARS') AS ars,
-                     COUNT(c.id)::int AS total_consultas, MAX(c.fecha_consulta) AS ultima_consulta,
-                     (CURRENT_DATE - MAX(c.fecha_consulta)::date) AS dias_sin_visita
+                     COUNT(c.id)::int AS total_consultas, MAX(${L('c.fecha_consulta')}) AS ultima_consulta,
+                     CASE WHEN COUNT(c.id) = 0 THEN 'Nunca ha consultado'
+                          ELSE (${HOY} - MAX(${L('c.fecha_consulta')})::date) || ' días' END AS dias_sin_visita
               FROM pacientes p
               LEFT JOIN ars a ON a.id = p.ars_id
               LEFT JOIN consultas c ON c.paciente_id = p.id
               WHERE p.activo = true
               GROUP BY p.id, a.nombre
-              HAVING MAX(c.fecha_consulta) IS NULL OR MAX(c.fecha_consulta) < CURRENT_DATE - ($1::int * INTERVAL '1 day')
-              ORDER BY MAX(c.fecha_consulta) ASC NULLS FIRST`,
+              HAVING COUNT(c.id) = 0 OR MAX(${L('c.fecha_consulta')})::date < ${HOY} - $1::int
+              ORDER BY MAX(c.fecha_consulta) ASC NULLS FIRST, p.apellido`,
         params: [dias],
       };
     },
@@ -302,11 +307,13 @@ const REPORTES = [
     grafico: { etiqueta: 'estado', valor: 'citas' },
     consulta(f) {
       const w = new Condiciones().rango('c.fecha', f);
+      // Se listan siempre los 5 estados (con 0 si no hay citas), en el orden del flujo de atención
       return {
-        sql: `SELECT c.estado, COUNT(*)::int AS citas,
-                     ROUND(100.0 * COUNT(*) / NULLIF(SUM(COUNT(*)) OVER (), 0), 1) AS porcentaje
-              FROM citas c ${w.where()}
-              GROUP BY c.estado ORDER BY citas DESC`,
+        sql: `SELECT e.estado, COUNT(c.id)::int AS citas,
+                     COALESCE(ROUND(100.0 * COUNT(c.id) / NULLIF(SUM(COUNT(c.id)) OVER (), 0), 1), 0) AS porcentaje
+              FROM (VALUES (1, 'Programada'), (2, 'Confirmada'), (3, 'En sala de espera'), (4, 'Atendida'), (5, 'Cancelada')) AS e(orden, estado)
+              LEFT JOIN (SELECT c.id, c.estado FROM citas c ${w.where()}) c ON c.estado = e.estado
+              GROUP BY e.orden, e.estado ORDER BY e.orden`,
         params: w.params,
       };
     },
@@ -331,7 +338,7 @@ const REPORTES = [
       const w = new Condiciones().fijo(`c.estado = 'Cancelada'`).rango('c.fecha', f);
       return {
         sql: `SELECT c.fecha, TO_CHAR(c.hora, 'HH12:MI AM') AS hora, ${NOMBRE_PACIENTE} AS paciente, c.telefono_contacto,
-                     c.motivo, c.notas_recepcion, c.created_at AS solicitada
+                     c.motivo, c.notas_recepcion, ${L('c.created_at')} AS solicitada
               FROM citas c INNER JOIN pacientes p ON p.id = c.paciente_id
               ${w.where()} ORDER BY c.fecha DESC, c.hora`,
         params: w.params,
@@ -386,9 +393,9 @@ const REPORTES = [
       const w = new Condiciones().fijo('c.fecha_llegada IS NOT NULL').rango('c.fecha', f);
       return {
         sql: `SELECT c.fecha, TO_CHAR(c.hora, 'HH12:MI AM') AS hora_cita, ${NOMBRE_PACIENTE} AS paciente,
-                     c.fecha_llegada AS llegada,
-                     ROUND(EXTRACT(EPOCH FROM (c.fecha_llegada - (c.fecha + c.hora))) / 60)::int AS min_retraso,
-                     co.fecha_consulta AS atencion,
+                     ${L('c.fecha_llegada')} AS llegada,
+                     ROUND(EXTRACT(EPOCH FROM (${L('c.fecha_llegada')} - (c.fecha + c.hora))) / 60)::int AS min_retraso,
+                     ${L('co.fecha_consulta')} AS atencion,
                      CASE WHEN co.fecha_consulta IS NOT NULL
                           THEN GREATEST(0, ROUND(EXTRACT(EPOCH FROM (co.fecha_consulta - c.fecha_llegada)) / 60))::int END AS min_espera
               FROM citas c
@@ -416,14 +423,16 @@ const REPORTES = [
     grafico: { etiqueta: 'dia', valor: 'total' },
     consulta(f) {
       const w = new Condiciones().rango('c.fecha', f);
+      // Se listan siempre los 7 días de lunes a domingo (con 0 si no hay citas)
       return {
-        sql: `SELECT ${DIA_SEMANA} AS dia,
-                     COUNT(*) FILTER (WHERE c.hora < '12:00')::int AS manana,
-                     COUNT(*) FILTER (WHERE c.hora >= '12:00')::int AS tarde,
-                     COUNT(*)::int AS total,
-                     COUNT(*) FILTER (WHERE c.estado = 'Cancelada')::int AS canceladas
-              FROM citas c ${w.where()}
-              GROUP BY EXTRACT(ISODOW FROM c.fecha), dia ORDER BY EXTRACT(ISODOW FROM c.fecha)`,
+        sql: `SELECT d.dia,
+                     COUNT(c.id) FILTER (WHERE c.hora < '12:00')::int AS manana,
+                     COUNT(c.id) FILTER (WHERE c.hora >= '12:00')::int AS tarde,
+                     COUNT(c.id)::int AS total,
+                     COUNT(c.id) FILTER (WHERE c.estado = 'Cancelada')::int AS canceladas
+              FROM (VALUES (1, 'Lunes'), (2, 'Martes'), (3, 'Miércoles'), (4, 'Jueves'), (5, 'Viernes'), (6, 'Sábado'), (7, 'Domingo')) AS d(n, dia)
+              LEFT JOIN (SELECT c.id, c.hora, c.estado, EXTRACT(ISODOW FROM c.fecha)::int AS n FROM citas c ${w.where()}) c ON c.n = d.n
+              GROUP BY d.n, d.dia ORDER BY d.n`,
         params: w.params,
       };
     },
@@ -436,7 +445,7 @@ const REPORTES = [
     id: 'consultas-periodo',
     modulo: 'consultas',
     titulo: 'Consultas realizadas por período',
-    descripcion: 'Consultas atendidas con motivo, diagnóstico, servicio y valor facturado.',
+    descripcion: 'Consultas atendidas con motivo, diagnóstico, servicio y ARS del paciente.',
     icono: 'bi-clipboard2-pulse',
     filtros: [...RANGO_FECHAS, { nombre: 'servicio_id', etiqueta: 'Servicio', tipo: 'select', fuente: 'servicios' }],
     columnas: [
@@ -446,14 +455,13 @@ const REPORTES = [
       { clave: 'motivo', etiqueta: 'Motivo' },
       { clave: 'diagnostico', etiqueta: 'Diagnóstico' },
       { clave: 'ars', etiqueta: 'ARS' },
-      { clave: 'valor_total', etiqueta: 'Valor', tipo: 'moneda', total: 'suma' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('co.fecha_consulta', f).agregar('co.servicio_id = ?', f.servicio_id);
+      const w = new Condiciones().rango(L('co.fecha_consulta'), f).agregar('co.servicio_id = ?', f.servicio_id);
       return {
-        sql: `SELECT co.fecha_consulta AS fecha, ${NOMBRE_PACIENTE} AS paciente, COALESCE(s.nombre, '—') AS servicio,
+        sql: `SELECT ${L('co.fecha_consulta')} AS fecha, ${NOMBRE_PACIENTE} AS paciente, COALESCE(s.nombre, '—') AS servicio,
                      co.motivo_consulta AS motivo, co.diagnostico_clinico AS diagnostico,
-                     COALESCE(a.nombre, 'Sin ARS') AS ars, co.valor_total
+                     COALESCE(a.nombre, 'Sin ARS') AS ars
               FROM consultas co
               INNER JOIN pacientes p ON p.id = co.paciente_id
               LEFT JOIN servicios s ON s.id = co.servicio_id
@@ -478,10 +486,10 @@ const REPORTES = [
     ],
     grafico: { etiqueta: 'diagnostico', valor: 'casos' },
     consulta(f) {
-      const w = new Condiciones().rango('co.fecha_consulta', f);
+      const w = new Condiciones().rango(L('co.fecha_consulta'), f);
       return {
         sql: `SELECT MIN(TRIM(co.diagnostico_clinico)) AS diagnostico, COUNT(*)::int AS casos,
-                     COUNT(DISTINCT co.paciente_id)::int AS pacientes, MAX(co.fecha_consulta) AS ultima_vez
+                     COUNT(DISTINCT co.paciente_id)::int AS pacientes, MAX(${L('co.fecha_consulta')}) AS ultima_vez
               FROM consultas co ${w.where()}
               GROUP BY LOWER(TRIM(co.diagnostico_clinico)) ORDER BY casos DESC, diagnostico LIMIT 50`,
         params: w.params,
@@ -492,23 +500,23 @@ const REPORTES = [
     id: 'consultas-por-servicio',
     modulo: 'consultas',
     titulo: 'Consultas por tipo de servicio',
-    descripcion: 'Cantidad de consultas, pacientes atendidos e ingresos generados por cada servicio médico.',
+    descripcion: 'Cantidad de consultas y pacientes atendidos en cada servicio médico.',
     icono: 'bi-diagram-3',
     filtros: [...RANGO_FECHAS],
     columnas: [
       { clave: 'servicio', etiqueta: 'Servicio' },
       { clave: 'consultas', etiqueta: 'Consultas', tipo: 'numero', total: 'suma' },
+      { clave: 'porcentaje', etiqueta: '% del total', tipo: 'porcentaje' },
       { clave: 'pacientes', etiqueta: 'Pacientes distintos', tipo: 'numero' },
-      { clave: 'ingreso_total', etiqueta: 'Ingreso total', tipo: 'moneda', total: 'suma' },
-      { clave: 'ingreso_promedio', etiqueta: 'Promedio por consulta', tipo: 'moneda' },
+      { clave: 'ultima', etiqueta: 'Última consulta', tipo: 'fecha' },
     ],
     grafico: { etiqueta: 'servicio', valor: 'consultas' },
     consulta(f) {
-      const w = new Condiciones().rango('co.fecha_consulta', f);
+      const w = new Condiciones().rango(L('co.fecha_consulta'), f);
       return {
         sql: `SELECT COALESCE(s.nombre, 'Sin servicio asignado') AS servicio, COUNT(co.id)::int AS consultas,
-                     COUNT(DISTINCT co.paciente_id)::int AS pacientes, SUM(co.valor_total) AS ingreso_total,
-                     ROUND(AVG(co.valor_total), 2) AS ingreso_promedio
+                     ROUND(100.0 * COUNT(co.id) / NULLIF(SUM(COUNT(co.id)) OVER (), 0), 1) AS porcentaje,
+                     COUNT(DISTINCT co.paciente_id)::int AS pacientes, MAX(${L('co.fecha_consulta')}) AS ultima
               FROM consultas co LEFT JOIN servicios s ON s.id = co.servicio_id
               ${w.where()} GROUP BY COALESCE(s.nombre, 'Sin servicio asignado') ORDER BY consultas DESC`,
         params: w.params,
@@ -519,29 +527,27 @@ const REPORTES = [
     id: 'consultas-pacientes-frecuentes',
     modulo: 'consultas',
     titulo: 'Pacientes más frecuentes',
-    descripcion: 'Los 50 pacientes con más consultas, con su primera y última visita.',
+    descripcion: 'Los 50 pacientes con más consultas, con su primera y última visita y el diagnóstico más reciente.',
     icono: 'bi-person-check',
     filtros: [...RANGO_FECHAS],
     columnas: [
       { clave: 'paciente', etiqueta: 'Paciente' },
       { clave: 'identificacion', etiqueta: 'Identificación' },
-      { clave: 'ars', etiqueta: 'ARS' },
       { clave: 'consultas', etiqueta: 'Consultas', tipo: 'numero', total: 'suma' },
       { clave: 'primera', etiqueta: 'Primera visita', tipo: 'fecha' },
       { clave: 'ultima', etiqueta: 'Última visita', tipo: 'fecha' },
-      { clave: 'total_facturado', etiqueta: 'Total facturado', tipo: 'moneda', total: 'suma' },
+      { clave: 'ultimo_diagnostico', etiqueta: 'Diagnóstico más reciente' },
     ],
     grafico: { etiqueta: 'paciente', valor: 'consultas' },
     consulta(f) {
-      const w = new Condiciones().rango('co.fecha_consulta', f);
+      const w = new Condiciones().rango(L('co.fecha_consulta'), f);
       return {
-        sql: `SELECT ${NOMBRE_PACIENTE} AS paciente, p.identificacion, COALESCE(a.nombre, 'Sin ARS') AS ars,
-                     COUNT(co.id)::int AS consultas, MIN(co.fecha_consulta) AS primera, MAX(co.fecha_consulta) AS ultima,
-                     SUM(co.valor_total) AS total_facturado
+        sql: `SELECT ${NOMBRE_PACIENTE} AS paciente, p.identificacion,
+                     COUNT(co.id)::int AS consultas, MIN(${L('co.fecha_consulta')}) AS primera, MAX(${L('co.fecha_consulta')}) AS ultima,
+                     (ARRAY_AGG(co.diagnostico_clinico ORDER BY co.fecha_consulta DESC))[1] AS ultimo_diagnostico
               FROM consultas co
               INNER JOIN pacientes p ON p.id = co.paciente_id
-              LEFT JOIN ars a ON a.id = p.ars_id
-              ${w.where()} GROUP BY p.id, a.nombre ORDER BY consultas DESC, ultima DESC LIMIT 50`,
+              ${w.where()} GROUP BY p.id ORDER BY consultas DESC, ultima DESC LIMIT 50`,
         params: w.params,
       };
     },
@@ -563,9 +569,9 @@ const REPORTES = [
       { clave: 'pendientes', etiqueta: 'Pendientes', tipo: 'numero', total: 'suma' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('r.fecha_emision', f);
+      const w = new Condiciones().rango(L('r.fecha_emision'), f);
       return {
-        sql: `SELECT r.codigo_receta, r.fecha_emision, ${NOMBRE_PACIENTE} AS paciente, co.diagnostico_clinico AS diagnostico,
+        sql: `SELECT r.codigo_receta, ${L('r.fecha_emision')} AS fecha_emision, ${NOMBRE_PACIENTE} AS paciente, co.diagnostico_clinico AS diagnostico,
                      COUNT(rd.id)::int AS medicamentos,
                      COUNT(rd.id) FILTER (WHERE rd.estado_dispensacion = 'Entregado')::int AS entregados,
                      COUNT(rd.id) FILTER (WHERE rd.estado_dispensacion = 'Pendiente')::int AS pendientes
@@ -594,7 +600,7 @@ const REPORTES = [
     ],
     grafico: { etiqueta: 'medicamento', valor: 'veces' },
     consulta(f) {
-      const w = new Condiciones().rango('r.fecha_emision', f);
+      const w = new Condiciones().rango(L('r.fecha_emision'), f);
       return {
         sql: `SELECT COALESCE(m.nombre, rd.nombre_medicamento) AS medicamento, COUNT(*)::int AS veces,
                      SUM(rd.cantidad_recetada)::int AS unidades, COUNT(DISTINCT r.paciente_id)::int AS pacientes,
@@ -687,12 +693,12 @@ const REPORTES = [
       const dias = parseInt(f.dias, 10) || 90;
       return {
         sql: `SELECT m.codigo, m.nombre || COALESCE(' ' || m.concentracion, '') AS nombre, m.lote, m.fecha_vencimiento,
-                     (m.fecha_vencimiento - CURRENT_DATE) AS dias_restantes, m.stock_actual,
+                     (m.fecha_vencimiento - ${HOY}) AS dias_restantes, m.stock_actual,
                      m.stock_actual * m.precio_unitario AS valor_riesgo,
-                     CASE WHEN m.fecha_vencimiento < CURRENT_DATE THEN 'Vencido' ELSE 'Por vencer' END AS estado
+                     CASE WHEN m.fecha_vencimiento < ${HOY} THEN 'Vencido' ELSE 'Por vencer' END AS estado
               FROM medicamentos m
               WHERE m.activo = true AND m.fecha_vencimiento IS NOT NULL
-                AND m.fecha_vencimiento <= CURRENT_DATE + $1::int
+                AND m.fecha_vencimiento <= ${HOY} + $1::int
               ORDER BY m.fecha_vencimiento ASC`,
         params: [dias],
       };
@@ -719,9 +725,9 @@ const REPORTES = [
       { clave: 'receta', etiqueta: 'Receta' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('fm.fecha', f).agregar('fm.tipo_movimiento = ?', f.tipo);
+      const w = new Condiciones().rango(L('fm.fecha'), f).agregar('fm.tipo_movimiento = ?', f.tipo);
       return {
-        sql: `SELECT fm.fecha, fm.tipo_movimiento AS tipo, COALESCE(m.nombre, rd.nombre_medicamento, '—') AS medicamento,
+        sql: `SELECT ${L('fm.fecha')} AS fecha, fm.tipo_movimiento AS tipo, COALESCE(m.nombre, rd.nombre_medicamento, '—') AS medicamento,
                      fm.cantidad, fm.stock_anterior, fm.stock_nuevo, fm.motivo, r.codigo_receta AS receta
               FROM farmacia_movimientos fm
               LEFT JOIN medicamentos m ON m.id = fm.medicamento_id
@@ -749,7 +755,7 @@ const REPORTES = [
       { clave: 'pct_entregado', etiqueta: '% entregado', tipo: 'porcentaje' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('r.fecha_emision', f);
+      const w = new Condiciones().rango(L('r.fecha_emision'), f);
       return {
         sql: `SELECT COALESCE(m.nombre, rd.nombre_medicamento) AS medicamento, COUNT(*)::int AS recetado,
                      COUNT(*) FILTER (WHERE rd.estado_dispensacion = 'Entregado')::int AS entregado,
@@ -786,7 +792,7 @@ const REPORTES = [
     grafico: { etiqueta: 'medicamento_ars', valor: 'porcentaje' },
     consulta(f) {
       // Las fechas filtran solo las entregas; el ARS filtra las coberturas configuradas
-      const entregas = new Condiciones().fijo(`rd.estado_dispensacion = 'Entregado'`).rango('rd.fecha_dispensacion', f);
+      const entregas = new Condiciones().fijo(`rd.estado_dispensacion = 'Entregado'`).rango(L('rd.fecha_dispensacion'), f);
       const params = [...entregas.params, f.ars_id || null];
       const pArs = `$${params.length}`;
       // Misma fórmula que coberturaFarmaciaService.calcularCobertura
@@ -834,14 +840,14 @@ const REPORTES = [
       { clave: 'pendiente', etiqueta: 'Pendiente de cobro', tipo: 'moneda', total: 'suma' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('co.fecha_consulta', f);
+      const w = new Condiciones().rango(L('co.fecha_consulta'), f);
       return {
-        sql: `SELECT co.fecha_consulta::date AS fecha, COUNT(*)::int AS consultas, SUM(co.valor_total) AS facturado,
+        sql: `SELECT ${L('co.fecha_consulta')}::date AS fecha, COUNT(*)::int AS consultas, SUM(co.valor_total) AS facturado,
                      SUM(co.valor_cubierto_ars) AS cubierto_ars, SUM(co.diferencia_paciente) AS paciente,
                      COALESCE(SUM(co.diferencia_paciente) FILTER (WHERE co.estado_pago = 'Pagado'), 0) AS cobrado,
                      COALESCE(SUM(co.diferencia_paciente) FILTER (WHERE co.estado_pago = 'Pendiente'), 0) AS pendiente
               FROM consultas co ${w.where()}
-              GROUP BY co.fecha_consulta::date ORDER BY fecha DESC`,
+              GROUP BY ${L('co.fecha_consulta')}::date ORDER BY fecha DESC`,
         params: w.params,
       };
     },
@@ -863,7 +869,7 @@ const REPORTES = [
     ],
     grafico: { etiqueta: 'ars', valor: 'a_reclamar' },
     consulta(f) {
-      const w = new Condiciones().rango('co.fecha_consulta', f);
+      const w = new Condiciones().rango(L('co.fecha_consulta'), f);
       return {
         sql: `SELECT COALESCE(a.nombre, 'Sin ARS') AS ars, COUNT(*)::int AS consultas, SUM(co.valor_total) AS facturado,
                      SUM(co.valor_cubierto_ars) AS a_reclamar, SUM(co.diferencia_paciente) AS copagos,
@@ -894,9 +900,9 @@ const REPORTES = [
     consulta(f) {
       const w = new Condiciones().fijo(`co.estado_pago = 'Pendiente'`).agregar('co.ars_id = ?', f.ars_id);
       return {
-        sql: `SELECT co.fecha_consulta AS fecha, ${NOMBRE_PACIENTE} AS paciente, p.telefono, COALESCE(s.nombre, '—') AS servicio,
+        sql: `SELECT ${L('co.fecha_consulta')} AS fecha, ${NOMBRE_PACIENTE} AS paciente, p.telefono, COALESCE(s.nombre, '—') AS servicio,
                      COALESCE(a.nombre, 'Sin ARS') AS ars, co.valor_total, co.diferencia_paciente AS adeudado,
-                     (CURRENT_DATE - co.fecha_consulta::date) AS dias
+                     (${HOY} - ${L('co.fecha_consulta')}::date) AS dias
               FROM consultas co
               INNER JOIN pacientes p ON p.id = co.paciente_id
               LEFT JOIN servicios s ON s.id = co.servicio_id
@@ -960,9 +966,9 @@ const REPORTES = [
       { clave: 'correo', etiqueta: 'Enviado por correo' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('e.fecha_emision', f).agregar('e.tipo_ecf = ?', f.tipo);
+      const w = new Condiciones().rango(L('e.fecha_emision'), f).agregar('e.tipo_ecf = ?', f.tipo);
       return {
-        sql: `SELECT e.fecha_emision, COALESCE(e.encf, '—') AS encf, e.tipo_ecf,
+        sql: `SELECT ${L('e.fecha_emision')} AS fecha_emision, COALESCE(e.encf, '—') AS encf, e.tipo_ecf,
                      COALESCE(e.razon_social_comprador, ${NOMBRE_PACIENTE}) AS cliente,
                      e.monto_total, e.total_itbis, e.estado,
                      CASE WHEN e.correo_enviado THEN 'Sí' ELSE 'No' END AS correo
@@ -996,9 +1002,9 @@ const REPORTES = [
       { clave: 'payer_email', etiqueta: 'Pagador' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango('COALESCE(pp.fecha_pago, pp.created_at)', f).agregar('pp.estado = ?', f.estado);
+      const w = new Condiciones().rango(L('COALESCE(pp.fecha_pago, pp.created_at)'), f).agregar('pp.estado = ?', f.estado);
       return {
-        sql: `SELECT COALESCE(pp.fecha_pago, pp.created_at) AS fecha, pp.referencia_interna, ${NOMBRE_PACIENTE} AS paciente,
+        sql: `SELECT ${L('COALESCE(pp.fecha_pago, pp.created_at)')} AS fecha, pp.referencia_interna, ${NOMBRE_PACIENTE} AS paciente,
                      pp.criterio_cobro, pp.monto_dop, pp.importe AS importe_usd, pp.tasa_cambio, pp.estado, pp.payer_email
               FROM pagos_paypal pp
               INNER JOIN consultas co ON co.id = pp.consulta_id
@@ -1029,11 +1035,11 @@ const REPORTES = [
       return {
         sql: `SELECT * FROM (
                 SELECT 1 AS o, 'Pacientes' AS area, 'Pacientes activos' AS indicador, (SELECT COUNT(*) FROM pacientes WHERE activo)::int AS cantidad, NULL::numeric AS monto
-                UNION ALL SELECT 2, 'Pacientes', 'Pacientes nuevos este mes', (SELECT COUNT(*) FROM pacientes WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE))::int, NULL
-                UNION ALL SELECT 3, 'Citas', 'Citas de hoy', (SELECT COUNT(*) FROM citas WHERE fecha = CURRENT_DATE)::int, NULL
-                UNION ALL SELECT 4, 'Citas', 'Citas próximas (programadas/confirmadas)', (SELECT COUNT(*) FROM citas WHERE fecha >= CURRENT_DATE AND estado IN ('Programada', 'Confirmada'))::int, NULL
-                UNION ALL SELECT 5, 'Consultas', 'Consultas este mes', (SELECT COUNT(*) FROM consultas WHERE fecha_consulta >= DATE_TRUNC('month', CURRENT_DATE))::int,
-                                     (SELECT COALESCE(SUM(valor_total), 0) FROM consultas WHERE fecha_consulta >= DATE_TRUNC('month', CURRENT_DATE))
+                UNION ALL SELECT 2, 'Pacientes', 'Pacientes nuevos este mes', (SELECT COUNT(*) FROM pacientes WHERE ${L('created_at')} >= ${MES_HOY})::int, NULL
+                UNION ALL SELECT 3, 'Citas', 'Citas de hoy', (SELECT COUNT(*) FROM citas WHERE fecha = ${HOY})::int, NULL
+                UNION ALL SELECT 4, 'Citas', 'Citas próximas (programadas/confirmadas)', (SELECT COUNT(*) FROM citas WHERE fecha >= ${HOY} AND estado IN ('Programada', 'Confirmada'))::int, NULL
+                UNION ALL SELECT 5, 'Consultas', 'Consultas este mes', (SELECT COUNT(*) FROM consultas WHERE ${L('fecha_consulta')} >= ${MES_HOY})::int,
+                                     (SELECT COALESCE(SUM(valor_total), 0) FROM consultas WHERE ${L('fecha_consulta')} >= ${MES_HOY})
                 UNION ALL SELECT 6, 'Consultas', 'Consultas históricas', (SELECT COUNT(*) FROM consultas)::int, (SELECT COALESCE(SUM(valor_total), 0) FROM consultas)
                 UNION ALL SELECT 7, 'Cobros', 'Cuentas pendientes de cobro', (SELECT COUNT(*) FROM consultas WHERE estado_pago = 'Pendiente')::int,
                                      (SELECT COALESCE(SUM(diferencia_paciente), 0) FROM consultas WHERE estado_pago = 'Pendiente')
@@ -1073,16 +1079,17 @@ const REPORTES = [
     consulta() {
       return {
         sql: `WITH meses AS (
-                SELECT generate_series(DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months', DATE_TRUNC('month', CURRENT_DATE), INTERVAL '1 month')::date AS mes
+                SELECT generate_series(${MES_HOY} - INTERVAL '11 months', ${MES_HOY}, INTERVAL '1 month')::date AS mes
               ), c AS (
-                SELECT DATE_TRUNC('month', fecha_consulta)::date AS mes, COUNT(*) AS consultas, SUM(valor_total) AS facturado,
+                SELECT DATE_TRUNC('month', ${L('fecha_consulta')})::date AS mes, COUNT(*) AS consultas, SUM(valor_total) AS facturado,
                        SUM(valor_cubierto_ars) AS cubierto_ars, SUM(diferencia_paciente) AS pacientes
                 FROM consultas GROUP BY 1
               ), f AS (
-                SELECT DATE_TRUNC('month', fecha_dispensacion)::date AS mes, SUM(monto_total) AS farmacia
+                SELECT DATE_TRUNC('month', ${L('fecha_dispensacion')})::date AS mes, SUM(monto_total) AS farmacia
                 FROM receta_detalles WHERE estado_dispensacion = 'Entregado' GROUP BY 1
               )
-              SELECT TO_CHAR(m.mes, 'YYYY-MM') AS mes, COALESCE(c.consultas, 0)::int AS consultas,
+              SELECT (ARRAY['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre',
+                            'Octubre', 'Noviembre', 'Diciembre'])[EXTRACT(MONTH FROM m.mes)::int] || ' ' || EXTRACT(YEAR FROM m.mes) AS mes, COALESCE(c.consultas, 0)::int AS consultas,
                      COALESCE(c.facturado, 0) AS facturado, COALESCE(c.cubierto_ars, 0) AS cubierto_ars,
                      COALESCE(c.pacientes, 0) AS pacientes, COALESCE(f.farmacia, 0) AS farmacia
               FROM meses m LEFT JOIN c ON c.mes = m.mes LEFT JOIN f ON f.mes = m.mes
@@ -1112,7 +1119,7 @@ const REPORTES = [
     consulta(f) {
       const w = new Condiciones().agregar('u.rol = ?', f.rol).agregar('u.activo = ?', f.estado ? f.estado === 'Activo' : '');
       return {
-        sql: `SELECT u.nombre, u.usuario, u.correo, u.rol, CASE WHEN u.activo THEN 'Activo' ELSE 'Inactivo' END AS estado, u.created_at
+        sql: `SELECT u.nombre, u.usuario, u.correo, u.rol, CASE WHEN u.activo THEN 'Activo' ELSE 'Inactivo' END AS estado, ${L('u.created_at')} AS created_at
               FROM usuarios u ${w.where()} ORDER BY u.rol, u.nombre`,
         params: w.params,
       };
@@ -1158,7 +1165,7 @@ const REPORTES = [
     ],
     consulta(f) {
       // $1 = desde, $2 = hasta (NULL = sin límite); se usan en ambos subconjuntos
-      const enRango = (col) => `($1::date IS NULL OR ${col} >= $1::date) AND ($2::date IS NULL OR ${col} < ($2::date + 1))`;
+      const enRango = (c) => `($1::date IS NULL OR ${L(c)} >= $1::date) AND ($2::date IS NULL OR ${L(c)} < ($2::date + 1))`;
       return {
         sql: `WITH e AS (
                 SELECT e.emitido_por_usuario_id AS uid, COUNT(*) AS n, SUM(e.monto_total) AS monto
@@ -1207,6 +1214,13 @@ const REPORTES = [
     },
   },
 ];
+
+// Numeración "módulo.reporte" (1.1 … 6.6) según el orden de MODULOS y de REPORTES
+MODULOS.forEach((m, i) => {
+  REPORTES.filter((r) => r.modulo === m.id).forEach((r, j) => {
+    r.codigo = `${i + 1}.${j + 1}`;
+  });
+});
 
 const POR_ID = new Map(REPORTES.map((r) => [r.id, r]));
 

@@ -158,7 +158,9 @@ exports.ver = async (req, res, next) => {
       grafico: calcularGrafico(reporte, filas),
       resumenFiltros: resumenFiltros(definiciones),
       urlCsv: `/reportes/${reporte.id}/csv${qs ? `?${qs}` : ''}`,
-      generadoEn: new Date(),
+      generadoEn: new Date().toLocaleString('es-DO', {
+        timeZone: 'America/Santo_Domingo', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      }),
       generadoPor: req.session.usuario.nombre,
     });
   } catch (error) {
