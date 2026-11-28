@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS citas (
     canal_solicitud VARCHAR(30) NOT NULL CHECK (canal_solicitud IN ('Teléfono', 'Mensajería', 'Presencial')),
     telefono_contacto VARCHAR(30) NOT NULL,
     correo_contacto VARCHAR(100),
-    motivo TEXT NOT NULL,
+    motivo TEXT, -- opcional: la secretaria no registra información clínica; el motivo lo anota el médico en la consulta
     estado VARCHAR(30) NOT NULL DEFAULT 'Programada' CHECK (estado IN ('Programada', 'Confirmada', 'En sala de espera', 'Atendida', 'Cancelada')),
     fecha_llegada TIMESTAMP,
     medico_notificado BOOLEAN DEFAULT false,

@@ -4,25 +4,31 @@
   <div class="col-12 col-lg-8">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
-        <h1 class="h3 fw-bold text-dark mb-1">
+        <h1 class="h3 fw-bold text-dark mb-0">
           <i class="bi bi-calendar-plus-fill text-teal me-2"></i>Agendar Cita Médica
         </h1>
-        <p class="text-muted mb-0">Registre solicitudes telefónicas, por mensajería o presenciales con verificación de disponibilidad.</p>
       </div>
       <a href="/citas" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i> Volver a la agenda
       </a>
     </div>
 
-    <!-- Alerta sobre verificación de disponibilidad -->
-    <div class="alert alert-light border border-teal-subtle d-flex align-items-center p-3 mb-4 rounded-3 shadow-sm">
-      <i class="bi bi-clock-history fs-4 text-teal me-3"></i>
-      <div class="fs-7 text-secondary">
-        <strong>Control de Disponibilidad:</strong> El sistema verifica que no existan citas duplicadas en el mismo horario para garantizar la puntualidad en el consultorio.
-      </div>
-    </div>
+    <%
+      // Valores a conservar si el servidor devolvió el formulario con un error (p. ej. horario ocupado)
+      const v = (typeof valores !== 'undefined' && valores) ? valores : {};
+      const err = (typeof errores !== 'undefined' && errores) ? errores : {};
+      const fechaNacTexto = (pacienteSeleccionado && pacienteSeleccionado.fecha_nacimiento)
+        ? (function (f) { const d = new Date(f); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear(); })(pacienteSeleccionado.fecha_nacimiento)
+        : '';
+      const HORARIOS = [
+        ['08:00:00', '08:00 AM'], ['08:30:00', '08:30 AM'], ['09:00:00', '09:00 AM'], ['09:30:00', '09:30 AM'],
+        ['10:00:00', '10:00 AM'], ['10:30:00', '10:30 AM'], ['11:00:00', '11:00 AM'], ['11:30:00', '11:30 AM'],
+        ['14:00:00', '02:00 PM'], ['14:30:00', '02:30 PM'], ['15:00:00', '03:00 PM'], ['15:30:00', '03:30 PM'],
+        ['16:00:00', '04:00 PM'], ['16:30:00', '04:30 PM'], ['17:00:00', '05:00 PM'],
+      ];
+    %>
 
-    <form action="/citas" method="POST" id="formAgendarCita" class="needs-validation" novalidate>
+    <form action="/citas" method="POST" id="formAgendarCita" class="needs-validation sin-check-valido" novalidate>
       <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-4">
           <div class="row g-3">
@@ -94,9 +100,9 @@
             <div class="col-12 col-md-6">
               <label for="canal_solicitud" class="form-label fw-semibold fs-7">Canal de Solicitud <span class="text-danger">*</span></label>
               <select name="canal_solicitud" id="canal_solicitud" class="form-select" required>
-                <option value="Teléfono">Llamada Telefónica</option>
-                <option value="Mensajería">Mensajería (WhatsApp / Telegram / SMS)</option>
-                <option value="Presencial">Presencial (En recepción del consultorio)</option>
+                <option value="Teléfono" <%= v.canal_solicitud === 'Teléfono' ? 'selected' : '' %>>Llamada Telefónica</option>
+                <option value="Mensajería" <%= v.canal_solicitud === 'Mensajería' ? 'selected' : '' %>>Mensajería (WhatsApp / Telegram / SMS)</option>
+                <option value="Presencial" <%= v.canal_solicitud === 'Presencial' ? 'selected' : '' %>>Presencial (En recepción del consultorio)</option>
               </select>
             </div>
 
@@ -107,7 +113,7 @@
                 <option value="">Consulta General (Por defecto)</option>
                 <% if (servicios && servicios.length > 0) { %>
                   <% servicios.forEach(function(s) { %>
-                    <option value="<%= s.id %>">
+                    <option value="<%= s.id %>" <%= String(v.servicio_id || '') === String(s.id) ? 'selected' : '' %>>
                       <%= s.nombre %> &mdash; <%= formatoMoneda(s.precio_base) %>
                     </option>
                   <% }); %>
@@ -126,7 +132,7 @@
                        id="fecha"
                        class="form-control input-fecha-hibrida"
                        placeholder="AAAA-MM-DD o DD/MM/AAAA"
-                       value="<%= cita && cita.fecha ? cita.fecha : new Date().toISOString().split('T')[0] %>"
+                       value="<%= v.fecha || (cita && cita.fecha ? cita.fecha : new Date().toISOString().split('T')[0]) %>"
                        autocomplete="off"
                        required>
                 <input type="date"
@@ -154,82 +160,41 @@
             <!-- Hora de la Cita -->
             <div class="col-12 col-md-6">
               <label for="hora" class="form-label fw-semibold fs-7">Hora de la Cita <span class="text-danger">*</span></label>
-              <select name="hora" id="hora" class="form-select" required>
+              <select name="hora" id="hora" class="form-select <%= err.hora ? 'is-invalid' : '' %>" required aria-describedby="error_hora">
                 <option value="">Seleccione horario disponible...</option>
-                <option value="08:00:00">08:00 AM</option>
-                <option value="08:30:00">08:30 AM</option>
-                <option value="09:00:00">09:00 AM</option>
-                <option value="09:30:00">09:30 AM</option>
-                <option value="10:00:00">10:00 AM</option>
-                <option value="10:30:00">10:30 AM</option>
-                <option value="11:00:00">11:00 AM</option>
-                <option value="11:30:00">11:30 AM</option>
-                <option value="14:00:00">02:00 PM</option>
-                <option value="14:30:00">02:30 PM</option>
-                <option value="15:00:00">03:00 PM</option>
-                <option value="15:30:00">03:30 PM</option>
-                <option value="16:00:00">04:00 PM</option>
-                <option value="16:30:00">04:30 PM</option>
-                <option value="17:00:00">05:00 PM</option>
+                <% HORARIOS.forEach(function(h) { %>
+                  <option value="<%= h[0] %>" <%= v.hora === h[0] ? 'selected' : '' %>><%= h[1] %></option>
+                <% }); %>
               </select>
+              <div class="invalid-feedback" id="error_hora"><%= err.hora || 'Seleccione la hora de la cita.' %></div>
             </div>
 
-            <!-- 2. Fecha de Nacimiento del Paciente (Escritura manual + Selector de calendario) -->
+            <!-- Fecha de Nacimiento: se toma del expediente del paciente (solo lectura, no se envía) -->
             <div class="col-12 col-md-6">
-              <label for="fecha_nacimiento" class="form-label fw-semibold fs-7">
+              <label for="fecha_nacimiento_paciente" class="form-label fw-semibold fs-7">
                 Fecha de Nacimiento del Paciente
               </label>
-              <div class="input-group">
-                <input type="text"
-                       name="fecha_nacimiento"
-                       id="fecha_nacimiento"
-                       class="form-control input-fecha-hibrida"
-                       placeholder="AAAA-MM-DD o DD/MM/AAAA"
-                       value="<%= pacienteSeleccionado && pacienteSeleccionado.fecha_nacimiento ? (new Date(pacienteSeleccionado.fecha_nacimiento).toISOString().split('T')[0]) : '' %>"
-                       autocomplete="off">
-                <input type="date"
-                       id="fecha_nacimiento_picker"
-                       class="picker-calendario-oculto"
-                       tabindex="-1"
-                       aria-hidden="true"
-                       style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;">
-                <button type="button"
-                        class="btn btn-outline-secondary btn-abrir-calendario"
-                        data-input-id="fecha_nacimiento"
-                        data-picker-id="fecha_nacimiento_picker"
-                        title="Abrir calendario">
-                  <i class="bi bi-calendar-event"></i>
-                </button>
-              </div>
-              <div class="invalid-feedback" id="error_fecha_nacimiento">
-                Fecha de nacimiento no válida. Ingrese una fecha correcta en formato AAAA-MM-DD o DD/MM/AAAA.
-              </div>
+              <input type="text"
+                     id="fecha_nacimiento_paciente"
+                     class="form-control bg-light"
+                     value="<%= fechaNacTexto %>"
+                     placeholder="Se completa al seleccionar el paciente"
+                     readonly
+                     tabindex="-1">
               <div class="form-text fs-8 text-muted">
-                Escriba con el teclado (ej: 1990-05-15 o 15/05/1990) o elija en el calendario.
+                Tomada del expediente del paciente. Para corregirla, edite la ficha del paciente.
               </div>
             </div>
 
             <!-- Datos de Contacto para Confirmación -->
             <div class="col-12 col-md-6">
               <label for="telefono_contacto" class="form-label fw-semibold fs-7">Teléfono de Contacto <span class="text-danger">*</span></label>
-              <input type="tel" name="telefono_contacto" id="telefono_contacto" value="<%= pacienteSeleccionado ? pacienteSeleccionado.telefono : '' %>" class="form-control" placeholder="Ej: 809-555-0123" required>
+              <input type="tel" name="telefono_contacto" id="telefono_contacto" value="<%= v.telefono_contacto || (pacienteSeleccionado ? pacienteSeleccionado.telefono : '') %>" class="form-control" placeholder="Ej: 809-555-0123" required>
             </div>
 
             <div class="col-12">
               <label for="correo_contacto" class="form-label fw-semibold fs-7">Correo de Contacto</label>
-              <input type="email" name="correo_contacto" id="correo_contacto" value="<%= pacienteSeleccionado ? (pacienteSeleccionado.correo || '') : '' %>" class="form-control" placeholder="Ej: paciente@correo.com">
-            </div>
-
-            <!-- Motivo de la Cita -->
-            <div class="col-12">
-              <label for="motivo" class="form-label fw-semibold fs-7">Motivo General de Consulta <span class="text-danger">*</span></label>
-              <textarea name="motivo" id="motivo" rows="2" class="form-control" placeholder="Describa el síntoma principal o razón de la visita (Ej: Dolor de cabeza frecuente, evaluación de rutina...)" required></textarea>
-            </div>
-
-            <!-- Observaciones internas -->
-            <div class="col-12">
-              <label for="notas_recepcion" class="form-label fw-semibold fs-7">Notas Internas de Recepción</label>
-              <input type="text" name="notas_recepcion" id="notas_recepcion" class="form-control" placeholder="Ej: Paciente solicitó médico de preferencia; traerá analíticas previas...">
+              <input type="email" name="correo_contacto" id="correo_contacto" value="<%= v.correo_contacto || (pacienteSeleccionado ? (pacienteSeleccionado.correo || '') : '') %>" class="form-control" placeholder="Ej: paciente@correo.com">
             </div>
 
           </div>
@@ -304,6 +269,12 @@ function formatearFechaIso(fechaRaw) {
   }
 }
 
+// Fecha del expediente en DD/MM/AAAA (para mostrarla de solo lectura)
+function formatearFechaDMY(fechaRaw) {
+  const iso = formatearFechaIso(fechaRaw);
+  return iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '';
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   // ELEMENTOS DE BÚSQUEDA DE PACIENTE
   const inputBuscar = document.getElementById('buscar_paciente');
@@ -319,7 +290,15 @@ document.addEventListener('DOMContentLoaded', function () {
   // CAMPOS DE CONTACTO Y FECHA DE NACIMIENTO
   const inputTel = document.getElementById('telefono_contacto');
   const inputCorreo = document.getElementById('correo_contacto');
-  const inputFechaNac = document.getElementById('fecha_nacimiento');
+  const inputFechaNac = document.getElementById('fecha_nacimiento_paciente');
+  const selectHora = document.getElementById('hora');
+
+  // Al elegir otra hora se quita el aviso de horario ocupado
+  if (selectHora) {
+    selectHora.addEventListener('change', function () {
+      this.classList.remove('is-invalid');
+    });
+  }
 
   let indiceResaltado = -1;
 
@@ -419,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function () {
       btn.type = 'button';
       btn.className = 'list-group-item list-group-item-action py-2 px-3 item-sugerencia-paciente text-start';
       
-      const nacTexto = p.fecha_nacimiento ? (' &bull; Nac: ' + formatearFechaIso(p.fecha_nacimiento)) : '';
+      const nacTexto = p.fecha_nacimiento ? (' &bull; Nac: ' + formatearFechaDMY(p.fecha_nacimiento)) : '';
       btn.innerHTML = `
         <div class="d-flex justify-content-between align-items-center">
           <div>
@@ -460,16 +439,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (inputTel && p.telefono) inputTel.value = p.telefono;
     if (inputCorreo && p.correo) inputCorreo.value = p.correo;
 
-    // Rellenar automáticamente la fecha de nacimiento si el paciente la tiene registrada
-    if (inputFechaNac && p.fecha_nacimiento) {
-      inputFechaNac.value = formatearFechaIso(p.fecha_nacimiento);
-      inputFechaNac.classList.remove('is-invalid');
-    }
+    // Fecha de nacimiento tomada del expediente (solo lectura)
+    if (inputFechaNac) inputFechaNac.value = formatearFechaDMY(p.fecha_nacimiento);
   }
 
   function limpiarSeleccionPaciente() {
     inputPacienteId.value = '';
     inputBuscar.value = '';
+    if (inputFechaNac) inputFechaNac.value = '';
     btnLimpiar.style.display = 'none';
     cardSeleccionado.classList.add('d-none');
     cardSeleccionado.classList.remove('d-flex');
@@ -594,21 +571,6 @@ document.addEventListener('DOMContentLoaded', function () {
       inputFechaCita.classList.remove('is-invalid');
       // Asegurar formato canónico ISO al enviar
       inputFechaCita.value = isoCita;
-    }
-
-    // 3. Validar fecha de nacimiento si fue proporcionada
-    if (inputFechaNac && inputFechaNac.value.trim()) {
-      const isoNac = normalizarFechaCliente(inputFechaNac.value);
-      if (!isoNac) {
-        e.preventDefault();
-        inputFechaNac.classList.add('is-invalid');
-        if (!tieneError) inputFechaNac.focus();
-        tieneError = true;
-      } else {
-        inputFechaNac.classList.remove('is-invalid');
-        // Asegurar formato canónico ISO al enviar
-        inputFechaNac.value = isoNac;
-      }
     }
   });
 });

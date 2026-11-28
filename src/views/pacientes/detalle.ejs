@@ -221,7 +221,6 @@
             <tr>
               <th>Fecha y Hora</th>
               <th>Canal de Solicitud</th>
-              <th>Motivo</th>
               <th>Estado</th>
               <th class="text-end">Acción</th>
             </tr>
@@ -238,7 +237,6 @@
                     <%= ci.canal_solicitud %>
                   </span>
                 </td>
-                <td><%= ci.motivo %></td>
                 <td>
                   <% if (ci.estado === 'En sala de espera') { %>
                     <span class="badge bg-warning text-dark"><i class="bi bi-bell-fill me-1"></i>En sala</span>

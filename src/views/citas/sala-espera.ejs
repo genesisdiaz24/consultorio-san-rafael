@@ -1,6 +1,8 @@
 <%- include('../partials/header') %>
 <%
   const rolSesion = usuarioActual ? usuarioActual.rol : '';
+  // El motivo es información clínica: solo lo ven el médico y el administrador
+  const verMotivo = ['MEDICO', 'ADMINISTRADOR'].includes(rolSesion);
   const puedeGestionarAgenda = ['ADMINISTRADOR', 'SECRETARIA', 'RECEPCION'].includes(rolSesion);
   const puedeVerFarmacia = ['ADMINISTRADOR', 'FARMACIA'].includes(rolSesion);
 %>
@@ -63,7 +65,7 @@
             <th>Paciente</th>
             <th>Tiempo en Espera</th>
             <th>ARS / Seguro</th>
-            <th>Motivo de la Consulta</th>
+            <th><%= verMotivo ? 'Motivo de la Consulta' : 'Servicio' %></th>
             <th class="text-end">Acción del Médico</th>
           </tr>
         </thead>
@@ -100,7 +102,9 @@
                   <% } %>
                 </td>
                 <td>
-                  <div class="fw-semibold fs-7"><%= c.motivo %></div>
+                  <% if (verMotivo && c.motivo) { %>
+                    <div class="fw-semibold fs-7"><%= c.motivo %></div>
+                  <% } %>
                   <small class="text-muted"><%= c.servicio_nombre || 'Consulta General' %></small>
                 </td>
                 <td class="text-end">

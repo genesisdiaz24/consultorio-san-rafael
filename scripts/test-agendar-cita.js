@@ -156,19 +156,28 @@ async function runTests() {
       'El campo Fecha de la Cita permite escritura manual con teclado y selección en calendario'
     );
     assert(
-      resForm.text.includes('id="fecha_nacimiento"') &&
-        resForm.text.includes('id="fecha_nacimiento_picker"') &&
-        resForm.text.includes('data-input-id="fecha_nacimiento"'),
-      'El campo Fecha de Nacimiento permite escritura manual con teclado y selección en calendario'
+      /id="fecha_nacimiento_paciente"[^>]*readonly/.test(resForm.text) &&
+        !resForm.text.includes('name="fecha_nacimiento"'),
+      'La Fecha de Nacimiento se muestra del expediente, de solo lectura y no se envía con la cita'
+    );
+    assert(
+      !resForm.text.includes('name="motivo"') && !resForm.text.includes('name="notas_recepcion"'),
+      'El formulario de la secretaria no tiene Motivo de Consulta ni Notas Internas (información clínica)'
+    );
+    assert(
+      !resForm.text.includes('Control de Disponibilidad') &&
+        !resForm.text.includes('Registre solicitudes telefónicas'),
+      'Se quitaron el subtítulo y el recuadro informativo de disponibilidad'
     );
 
     // =========================================================================
     // 3. GUARDAR CITA ESCRIBIENDO FECHAS MANUALMENTE EN FORMATO DD/MM/AAAA
     // =========================================================================
-    console.log('\n3. Guardando cita con fecha manual DD/MM/AAAA y fecha de nacimiento manual...');
+    console.log('\n3. Guardando cita con fecha manual DD/MM/AAAA, sin motivo ni notas...');
     const { rows: pRows } = await db.query(`SELECT id, fecha_nacimiento FROM pacientes ORDER BY id ASC LIMIT 1`);
     const paciente = pRows[0];
 
+    // Una fecha_nacimiento enviada a mano (formulario viejo o manipulado) NO debe cambiar el expediente
     const formCitaManual = new URLSearchParams({
       _csrf: secAuth.csrfToken,
       paciente_id: String(paciente.id),
@@ -177,8 +186,7 @@ async function runTests() {
       hora: '09:00:00',
       telefono_contacto: '809-555-4321',
       correo_contacto: 'paciente.test@sanrafael.com',
-      fecha_nacimiento: '18/06/1994', // Fecha de nacimiento escrita manualmente
-      motivo: 'Evaluación general y chequeo preventivo anual',
+      fecha_nacimiento: '01/01/1901',
     }).toString();
 
     const resGuardarManual = await request(appUrl, '/citas', {
@@ -206,15 +214,19 @@ async function runTests() {
     );
     testCitaIdA = citaDb[0].id;
 
-    // Verificar que la fecha de nacimiento se actualizó y conservó en el paciente como 1994-06-18
+    assert(
+      citaDb[0].motivo === null && citaDb[0].notas_recepcion === null,
+      'La cita se guarda sin motivo ni notas (el motivo lo registra el médico en la consulta)'
+    );
+
+    // La fecha de nacimiento del expediente no cambia al agendar
     const { rows: pacienteActualizado } = await db.query(
       `SELECT fecha_nacimiento FROM pacientes WHERE id = $1`,
       [paciente.id]
     );
     assert(
-      pacienteActualizado.length === 1 &&
-        pacienteActualizado[0].fecha_nacimiento.toISOString().startsWith('1994-06-18'),
-      'La fecha de nacimiento escrita manualmente (18/06/1994) se validó y conservó como 1994-06-18 en la ficha del paciente'
+      pacienteActualizado[0].fecha_nacimiento.getTime() === paciente.fecha_nacimiento.getTime(),
+      'Agendar una cita no modifica la fecha de nacimiento del expediente'
     );
 
     // =========================================================================
@@ -228,8 +240,6 @@ async function runTests() {
       fecha: '2026-11-26', // Formato ISO devuelto por el selector de calendario
       hora: '10:30:00',
       telefono_contacto: '809-555-9876',
-      fecha_nacimiento: '1994-06-18',
-      motivo: 'Revisión de resultados de laboratorio',
     }).toString();
 
     const resGuardarIso = await request(appUrl, '/citas', {
@@ -266,7 +276,6 @@ async function runTests() {
       fecha: '31/02/2026', // 31 de febrero no existe
       hora: '14:00:00',
       telefono_contacto: '809-555-1111',
-      motivo: 'Consulta de control',
     }).toString();
 
     const resFechaInvalida = await request(appUrl, '/citas', {
@@ -279,34 +288,41 @@ async function runTests() {
     });
 
     assert(
-      resFechaInvalida.status === 302 && resFechaInvalida.headers.location === '/citas/nueva',
-      'El servidor rechaza fecha de cita inexistente (31/02/2026) y redirige a /citas/nueva con alerta'
+      resFechaInvalida.status === 422 &&
+        resFechaInvalida.text.includes('formato de la fecha de la cita no es válido') &&
+        resFechaInvalida.text.includes('809-555-1111'),
+      'El servidor rechaza fecha de cita inexistente (31/02/2026) y devuelve el formulario con lo escrito'
     );
 
-    // 5B. Fecha de nacimiento inválida
-    const formNacInvalido = new URLSearchParams({
+    // 5B. Horario ocupado: mensaje de error en el campo Hora y se conservan los datos
+    const formHorarioOcupado = new URLSearchParams({
       _csrf: secAuth.csrfToken,
       paciente_id: String(paciente.id),
-      canal_solicitud: 'Presencial',
-      fecha: '2026-11-27',
-      hora: '14:00:00',
-      telefono_contacto: '809-555-1111',
-      fecha_nacimiento: '99/99/9999',
-      motivo: 'Consulta de control',
+      canal_solicitud: 'Teléfono',
+      fecha: '25/11/2026',
+      hora: '09:00:00', // mismo horario de la cita del paso 3
+      telefono_contacto: '809-555-2222',
     }).toString();
 
-    const resNacInvalido = await request(appUrl, '/citas', {
+    const resOcupado = await request(appUrl, '/citas', {
       method: 'POST',
       headers: {
         Cookie: secAuth.cookie,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: formNacInvalido,
+      body: formHorarioOcupado,
     });
 
+    const { rows: duplicadas } = await db.query(
+      `SELECT COUNT(*)::int AS n FROM citas WHERE fecha = '2026-11-25' AND hora = '09:00:00' AND estado <> 'Cancelada'`
+    );
     assert(
-      resNacInvalido.status === 302 && resNacInvalido.headers.location === '/citas/nueva',
-      'El servidor rechaza fecha de nacimiento con formato incorrecto y redirige a /citas/nueva con alerta'
+      resOcupado.status === 409 &&
+        /id="hora" class="form-select is-invalid"/.test(resOcupado.text) &&
+        resOcupado.text.includes('Este horario ya está ocupado') &&
+        resOcupado.text.includes('809-555-2222') &&
+        duplicadas[0].n === 1,
+      'Horario ocupado: no se duplica la cita y el error aparece en el campo Hora conservando los datos'
     );
 
     // 5C. Intento sin paciente_id
@@ -317,7 +333,6 @@ async function runTests() {
       fecha: '2026-11-27',
       hora: '15:00:00',
       telefono_contacto: '809-555-1111',
-      motivo: 'Consulta de control',
     }).toString();
 
     const resSinPaciente = await request(appUrl, '/citas', {
@@ -330,7 +345,7 @@ async function runTests() {
     });
 
     assert(
-      resSinPaciente.status === 302 && resSinPaciente.headers.location === '/citas/nueva',
+      resSinPaciente.status === 422 && resSinPaciente.text.includes('complete todos los datos requeridos'),
       'El servidor exige obligatoriamente la selección de un paciente válido'
     );
 

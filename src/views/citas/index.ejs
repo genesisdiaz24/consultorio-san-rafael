@@ -65,7 +65,7 @@
             <th>Paciente</th>
             <th>Canal de Origen</th>
             <th>Contacto</th>
-            <th>Motivo de Consulta</th>
+            <th>Servicio</th>
             <th>Estado</th>
             <th class="text-end">Acciones</th>
           </tr>
@@ -102,10 +102,7 @@
                   <% } %>
                 </td>
                 <td>
-                  <span class="fs-7"><%= c.motivo %></span>
-                  <% if (c.servicio_nombre) { %>
-                    <small class="d-block text-teal"><%= c.servicio_nombre %></small>
-                  <% } %>
+                  <span class="fs-7 text-teal"><%= c.servicio_nombre || 'Consulta General' %></span>
                 </td>
                 <td>
                   <% if (c.estado === 'En sala de espera') { %>

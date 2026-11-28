@@ -46,146 +46,98 @@ exports.listar = async (req, res, next) => {
   }
 };
 
+// Muestra el formulario de cita. Si viene de un intento fallido, conserva lo escrito y marca el campo con error.
+async function renderFormulario(res, { pacienteId = null, valores = {}, errores = {}, mensajeError = null, status = 200 } = {}) {
+  let pacienteSeleccionado = null;
+  const idPaciente = parseInt(pacienteId, 10);
+  if (idPaciente > 0) {
+    const { rows } = await db.query(`SELECT * FROM pacientes WHERE id = $1`, [idPaciente]);
+    if (rows.length > 0) pacienteSeleccionado = rows[0];
+  }
+
+  const { rows: pacientes } = await db.query(
+    `SELECT id, identificacion, nombre, apellido, telefono, correo, fecha_nacimiento FROM pacientes WHERE activo = true ORDER BY nombre ASC`
+  );
+
+  const { rows: servicios } = await db.query(
+    `SELECT id, codigo, nombre, precio_base FROM servicios WHERE activo = true ORDER BY nombre ASC`
+  );
+
+  if (mensajeError) res.locals.mensajes.error = [...(res.locals.mensajes.error || []), mensajeError];
+
+  res.status(status).render('citas/form', {
+    pacientes,
+    servicios,
+    pacienteSeleccionado,
+    cita: {},
+    valores,
+    errores,
+    title: 'Agendar Nueva Cita',
+  });
+}
+
 // Formulario para nueva cita
 exports.formularioCrear = async (req, res, next) => {
   try {
-    const pacienteId = req.query.paciente_id;
-    let pacienteSeleccionado = null;
-
-    if (pacienteId) {
-      const { rows } = await db.query(`SELECT * FROM pacientes WHERE id = $1`, [pacienteId]);
-      if (rows.length > 0) pacienteSeleccionado = rows[0];
-    }
-
-    const { rows: pacientes } = await db.query(
-      `SELECT id, identificacion, nombre, apellido, telefono, correo, fecha_nacimiento FROM pacientes WHERE activo = true ORDER BY nombre ASC`
-    );
-
-    const { rows: servicios } = await db.query(
-      `SELECT id, codigo, nombre, precio_base FROM servicios WHERE activo = true ORDER BY nombre ASC`
-    );
-
-    res.render('citas/form', {
-      pacientes,
-      servicios,
-      pacienteSeleccionado,
-      cita: {},
-      title: 'Agendar Nueva Cita',
-    });
+    await renderFormulario(res, { pacienteId: req.query.paciente_id });
   } catch (error) {
     next(error);
   }
 };
 
-// Función auxiliar para validar y normalizar fechas escritas manualmente o elegidas con calendario (AAAA-MM-DD o DD/MM/AAAA)
-function normalizarFecha(str) {
-  if (!str || typeof str !== 'string') return null;
-  const s = str.trim();
-
-  // 1. Formato ISO AAAA-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const [y, m, d] = s.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
-      return s;
-    }
-    return null;
-  }
-
-  // 2. Formato latinoamericano DD/MM/AAAA o DD-MM-AAAA
-  const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (match) {
-    const d = parseInt(match[1], 10);
-    const m = parseInt(match[2], 10);
-    const y = parseInt(match[3], 10);
-    const date = new Date(y, m - 1, d);
-    if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
-      const mm = String(m).padStart(2, '0');
-      const dd = String(d).padStart(2, '0');
-      return `${y}-${mm}-${dd}`;
-    }
-    return null;
-  }
-
-  return null;
-}
+// Validación y normalización de fechas escritas (AAAA-MM-DD o DD/MM/AAAA): utilidad compartida
+const { normalizarFecha } = require('../utils/fechas');
 exports.normalizarFecha = normalizarFecha;
 
-// Guardar cita con verificación de disponibilidad de horario y normalización de fechas manuales/calendario
-exports.crear = async (req, res, next) => {
-  try {
-    const {
-      paciente_id,
-      servicio_id,
-      fecha,
-      hora,
-      canal_solicitud,
-      telefono_contacto,
-      correo_contacto,
-      fecha_nacimiento,
-      motivo,
-      notas_recepcion,
-    } = req.body;
+const HORAS_VALIDAS = [
+  '08:00:00', '08:30:00', '09:00:00', '09:30:00', '10:00:00', '10:30:00', '11:00:00', '11:30:00',
+  '14:00:00', '14:30:00', '15:00:00', '15:30:00', '16:00:00', '16:30:00', '17:00:00',
+];
 
-    if (!paciente_id || !fecha || !hora || !canal_solicitud || !telefono_contacto || !motivo) {
-      req.flash('error', 'Por favor complete todos los datos requeridos para la cita (*).');
-      return res.redirect('/citas/nueva');
+// Guardar cita con verificación de disponibilidad de horario.
+// La secretaria no registra información clínica: el motivo de consulta lo anota el médico al atender.
+// La fecha de nacimiento se muestra del expediente y no se modifica desde aquí.
+exports.crear = async (req, res, next) => {
+  const { paciente_id, servicio_id, fecha, hora, canal_solicitud, telefono_contacto, correo_contacto } = req.body;
+  const valores = { paciente_id, servicio_id, fecha, hora, canal_solicitud, telefono_contacto, correo_contacto };
+  const volver = (opciones) => renderFormulario(res, { pacienteId: paciente_id, valores, ...opciones });
+
+  try {
+    if (!paciente_id || !fecha || !hora || !canal_solicitud || !telefono_contacto || !String(telefono_contacto).trim()) {
+      return await volver({ status: 422, mensajeError: 'Por favor complete todos los datos requeridos para la cita (*).' });
+    }
+
+    if (!HORAS_VALIDAS.includes(hora)) {
+      return await volver({ status: 422, errores: { hora: 'Seleccione una hora de la lista.' } });
     }
 
     // 1. Validar y normalizar formato de fecha de la cita (permite escritura manual y calendario)
     const fechaNormalizada = normalizarFecha(fecha);
     if (!fechaNormalizada) {
-      req.flash(
-        'error',
-        'El formato de la fecha de la cita no es válido. Utilice el formato AAAA-MM-DD (ej: 2026-10-20) o DD/MM/AAAA (ej: 20/10/2026).'
-      );
-      return res.redirect('/citas/nueva');
+      return await volver({
+        status: 422,
+        mensajeError: 'El formato de la fecha de la cita no es válido. Utilice AAAA-MM-DD (ej: 2026-10-20) o DD/MM/AAAA (ej: 20/10/2026).',
+      });
     }
+    valores.fecha = fechaNormalizada;
 
-    // 2. Validar y conservar fecha de nacimiento del paciente (si se ingresó o editó)
-    let fechaNacNormalizada = null;
-    if (fecha_nacimiento && String(fecha_nacimiento).trim() !== '') {
-      fechaNacNormalizada = normalizarFecha(fecha_nacimiento);
-      if (!fechaNacNormalizada) {
-        req.flash(
-          'error',
-          'El formato de la fecha de nacimiento no es válido. Utilice el formato AAAA-MM-DD (ej: 1990-05-15) o DD/MM/AAAA (ej: 15/05/1990).'
-        );
-        return res.redirect('/citas/nueva');
-      }
-
-      // Conservar la fecha de nacimiento en el expediente del paciente
-      await db.query(
-        `UPDATE pacientes SET fecha_nacimiento = $1 WHERE id = $2`,
-        [fechaNacNormalizada, parseInt(paciente_id, 10)]
-      );
-    }
-
-    // 3. Verificación de disponibilidad de horario para evitar solapamientos
+    // 2. Verificación interna de disponibilidad: un solo paciente por horario
     const { rows: existentes } = await db.query(
-      `SELECT c.id, c.hora, p.nombre, p.apellido
-       FROM citas c
-       INNER JOIN pacientes p ON c.paciente_id = p.id
+      `SELECT c.id FROM citas c
        WHERE c.fecha = $1 AND c.hora = $2 AND c.estado NOT IN ('Cancelada')`,
       [fechaNormalizada, hora]
     );
-
+    const horarioOcupado = 'Este horario ya está ocupado para la fecha elegida. Seleccione otra hora.';
     if (existentes.length > 0) {
-      const conflicto = existentes[0];
-      req.flash(
-        'error',
-        `Conflicto de horario: Ya existe una cita activa para el ${fechaNormalizada} a las ${hora} (Paciente: ${conflicto.nombre} ${conflicto.apellido}). Seleccione otro horario.`
-      );
-      return res.redirect('/citas/nueva');
+      return await volver({ status: 409, errores: { hora: horarioOcupado } });
     }
 
-    // 4. Inserción de la cita con fecha validada y normalizada
+    // 3. Inserción de la cita (sin motivo ni notas: no son datos de recepción)
     const insertQuery = `
       INSERT INTO citas (
         paciente_id, servicio_id, fecha, hora,
-        canal_solicitud, telefono_contacto, correo_contacto,
-        motivo, notas_recepcion, estado
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Programada')
+        canal_solicitud, telefono_contacto, correo_contacto, estado
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Programada')
       RETURNING id
     `;
 
@@ -197,11 +149,18 @@ exports.crear = async (req, res, next) => {
       canal_solicitud,
       telefono_contacto.trim(),
       correo_contacto ? correo_contacto.trim() : null,
-      motivo.trim(),
-      notas_recepcion ? notas_recepcion.trim() : null,
     ];
 
-    await db.query(insertQuery, values);
+    try {
+      await db.query(insertQuery, values);
+    } catch (error) {
+      // El mismo paciente ya tuvo una cita (aunque cancelada) en ese día y hora: restricción única de la tabla
+      if (error.code === '23505') {
+        return await volver({ status: 409, errores: { hora: 'El paciente ya tiene registrada una cita en este día y hora. Seleccione otra hora.' } });
+      }
+      throw error;
+    }
+
     req.flash('success', 'Cita agendada correctamente.');
     res.redirect('/citas');
   } catch (error) {

@@ -320,7 +320,6 @@ const REPORTES = [
       { clave: 'paciente', etiqueta: 'Paciente' },
       { clave: 'telefono_contacto', etiqueta: 'Teléfono' },
       { clave: 'servicio', etiqueta: 'Servicio' },
-      { clave: 'motivo', etiqueta: 'Motivo' },
       { clave: 'canal_solicitud', etiqueta: 'Canal' },
       { clave: 'estado', etiqueta: 'Estado', tipo: 'estado' },
     ],
@@ -328,7 +327,7 @@ const REPORTES = [
       const w = new Condiciones().rango('c.fecha', f).agregar('c.estado = ?', f.estado);
       return {
         sql: `SELECT c.fecha, TO_CHAR(c.hora, 'HH12:MI AM') AS hora, ${NOMBRE_PACIENTE} AS paciente, c.telefono_contacto,
-                     COALESCE(s.nombre, '—') AS servicio, c.motivo, c.canal_solicitud, c.estado
+                     COALESCE(s.nombre, '—') AS servicio, c.canal_solicitud, c.estado
               FROM citas c
               INNER JOIN pacientes p ON p.id = c.paciente_id
               LEFT JOIN servicios s ON s.id = c.servicio_id
@@ -367,7 +366,7 @@ const REPORTES = [
     id: 'citas-canceladas',
     modulo: 'citas',
     titulo: 'Citas canceladas',
-    descripcion: 'Detalle de las citas canceladas con el motivo de la cita y las notas de recepción.',
+    descripcion: 'Detalle de las citas canceladas: paciente, contacto, servicio, canal y cuándo se solicitó (para reprogramar).',
     icono: 'bi-calendar-x',
     filtros: [...RANGO_FECHAS],
     columnas: [
@@ -375,16 +374,17 @@ const REPORTES = [
       { clave: 'hora', etiqueta: 'Hora' },
       { clave: 'paciente', etiqueta: 'Paciente' },
       { clave: 'telefono_contacto', etiqueta: 'Teléfono' },
-      { clave: 'motivo', etiqueta: 'Motivo de la cita' },
-      { clave: 'notas_recepcion', etiqueta: 'Notas de recepción' },
+      { clave: 'servicio', etiqueta: 'Servicio' },
+      { clave: 'canal_solicitud', etiqueta: 'Canal' },
       { clave: 'solicitada', etiqueta: 'Solicitada el', tipo: 'fechahora' },
     ],
     consulta(f) {
       const w = new Condiciones().fijo(`c.estado = 'Cancelada'`).rango('c.fecha', f);
       return {
         sql: `SELECT c.fecha, TO_CHAR(c.hora, 'HH12:MI AM') AS hora, ${NOMBRE_PACIENTE} AS paciente, c.telefono_contacto,
-                     c.motivo, c.notas_recepcion, ${L('c.created_at')} AS solicitada
+                     COALESCE(s.nombre, '—') AS servicio, c.canal_solicitud, ${L('c.created_at')} AS solicitada
               FROM citas c INNER JOIN pacientes p ON p.id = c.paciente_id
+              LEFT JOIN servicios s ON s.id = c.servicio_id
               ${w.where()} ORDER BY c.fecha DESC, c.hora`,
         params: w.params,
       };

@@ -23,7 +23,7 @@
       </div>
     </div>
 
-    <form action="<%= esEdicion ? '/pacientes/' + paciente.id : '/pacientes' %>" method="POST" class="needs-validation" novalidate>
+    <form action="<%= esEdicion ? '/pacientes/' + paciente.id : '/pacientes' %>" method="POST" class="needs-validation sin-check-valido" novalidate>
       
       <!-- Bloque 1: Identificación y Datos Personales -->
       <div class="card border-0 shadow-sm mb-4">
@@ -70,8 +70,38 @@
             </div>
 
             <div class="col-12 col-md-4">
+              <%
+                // Valor inicial DD/MM/AAAA (vacío al registrar; el de la ficha al editar)
+                let fechaNacTexto = '';
+                if (paciente.fecha_nacimiento) {
+                  const fn = new Date(paciente.fecha_nacimiento);
+                  fechaNacTexto = String(fn.getDate()).padStart(2, '0') + '/' + String(fn.getMonth() + 1).padStart(2, '0') + '/' + fn.getFullYear();
+                }
+              %>
               <label for="fecha_nacimiento" class="form-label fw-semibold fs-7">Fecha de Nacimiento <span class="text-danger">*</span></label>
-              <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" value="<%= paciente.fecha_nacimiento ? (new Date(paciente.fecha_nacimiento).toISOString().split('T')[0]) : '' %>" class="form-control" required>
+              <div class="input-group">
+                <input type="text"
+                       name="fecha_nacimiento"
+                       id="fecha_nacimiento"
+                       value="<%= fechaNacTexto %>"
+                       class="form-control"
+                       placeholder="DD/MM/AAAA"
+                       inputmode="numeric"
+                       maxlength="10"
+                       autocomplete="off"
+                       data-campo-fecha
+                       data-min="1900-01-01"
+                       data-max="hoy"
+                       aria-describedby="fecha_nacimiento_ayuda"
+                       required>
+                <button type="button" class="btn btn-outline-secondary" data-abrir-calendario title="Abrir calendario" aria-label="Abrir calendario">
+                  <i class="bi bi-calendar-event"></i>
+                </button>
+              </div>
+              <div class="invalid-feedback"></div>
+              <div class="form-text fs-8 text-muted" id="fecha_nacimiento_ayuda">
+                Escriba con el teclado (ej: 15/05/1990) o elija en el calendario.
+              </div>
             </div>
           </div>
         </div>
@@ -176,6 +206,8 @@
     </form>
   </div>
 </div>
+
+<script src="/js/campo-fecha.js"></script>
 
 <%- include('../partials/footer') %>
 

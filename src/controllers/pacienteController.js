@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { validarFechaNacimiento } = require('../utils/fechas');
 
 // Listar pacientes con filtro de búsqueda
 exports.listar = async (req, res, next) => {
@@ -81,6 +82,13 @@ exports.crear = async (req, res, next) => {
       return res.redirect('/pacientes/nuevo');
     }
 
+    // Fecha de nacimiento: DD/MM/AAAA o AAAA-MM-DD, entre 1900 y hoy
+    const fechaNac = validarFechaNacimiento(fecha_nacimiento);
+    if (fechaNac.error) {
+      req.flash('error', fechaNac.error);
+      return res.redirect('/pacientes/nuevo');
+    }
+
     // Control estricto de duplicados por identificación
     const idNormalizada = identificacion.trim();
     const { rows: duplicados } = await db.query(
@@ -112,7 +120,7 @@ exports.crear = async (req, res, next) => {
       tipo_documento || 'Cédula',
       nombre.trim(),
       apellido.trim(),
-      fecha_nacimiento,
+      fechaNac.iso,
       genero,
       direccion || null,
       telefono.trim(),
@@ -293,6 +301,13 @@ exports.actualizar = async (req, res, next) => {
 
     const idNormalizada = identificacion.trim();
 
+    // Fecha de nacimiento: DD/MM/AAAA o AAAA-MM-DD, entre 1900 y hoy
+    const fechaNac = validarFechaNacimiento(fecha_nacimiento);
+    if (fechaNac.error) {
+      req.flash('error', fechaNac.error);
+      return res.redirect(`/pacientes/${id}/editar`);
+    }
+
     // Validar duplicado con otros pacientes
     const { rows: otros } = await db.query(
       `SELECT id FROM pacientes WHERE identificacion = $1 AND id != $2`,
@@ -348,7 +363,7 @@ exports.actualizar = async (req, res, next) => {
       tipo_documento || 'Cédula',
       nombre.trim(),
       apellido.trim(),
-      fecha_nacimiento,
+      fechaNac.iso,
       genero,
       direccion || null,
       telefono.trim(),

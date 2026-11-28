@@ -156,6 +156,14 @@ const MIGRACIONES = [
       END $$;
     `,
   },
+  {
+    nombre: '2026-11-citas-sin-motivo-clinico',
+    sql: `
+      -- La secretaria ya no registra el motivo de la cita (información clínica):
+      -- el motivo lo anota el médico en la consulta. Las citas existentes conservan su motivo.
+      ALTER TABLE citas ALTER COLUMN motivo DROP NOT NULL;
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {
