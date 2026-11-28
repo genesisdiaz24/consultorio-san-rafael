@@ -164,6 +164,43 @@ const MIGRACIONES = [
       ALTER TABLE citas ALTER COLUMN motivo DROP NOT NULL;
     `,
   },
+  {
+    nombre: '2026-11-panel-medico-historial-recetas',
+    sql: `
+      -- Datos clínicos del encabezado del historial (opcionales: si faltan se muestra "No registrado")
+      ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS tipo_sangre VARCHAR(5);
+      ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS medicamentos_actuales TEXT;
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_pacientes_tipo_sangre') THEN
+          ALTER TABLE pacientes ADD CONSTRAINT chk_pacientes_tipo_sangre
+            CHECK (tipo_sangre IS NULL OR tipo_sangre IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'));
+        END IF;
+      END $$;
+
+      -- Momento en que el médico abre la atención de una cita en sala ("En consulta" en la Agenda de Hoy).
+      -- No cambia el estado de la cita que usan los demás roles.
+      ALTER TABLE citas ADD COLUMN IF NOT EXISTS atencion_iniciada_en TIMESTAMP;
+
+      -- Códigos de receta estandarizados REC-AAAA-0000, consecutivos por año de emisión (hora de RD).
+      -- No se borra ninguna receta: solo cambia el código. El Kardex guardaba el código en su texto.
+      CREATE TEMP TABLE mapa_recetas ON COMMIT DROP AS
+      SELECT id, codigo_receta AS viejo,
+             'REC-' || anio || '-' || LPAD(ROW_NUMBER() OVER (PARTITION BY anio ORDER BY fecha_emision, id)::text, 4, '0') AS nuevo
+      FROM (
+        SELECT id, codigo_receta, fecha_emision,
+               EXTRACT(YEAR FROM (fecha_emision::timestamptz AT TIME ZONE 'America/Santo_Domingo'))::int AS anio
+        FROM recetas
+      ) t;
+
+      UPDATE recetas SET codigo_receta = 'TMP-' || id;
+      UPDATE recetas r SET codigo_receta = m.nuevo FROM mapa_recetas m WHERE m.id = r.id;
+      UPDATE farmacia_movimientos fm
+         SET motivo = REPLACE(fm.motivo, 'receta ' || m.viejo || ' ', 'receta ' || m.nuevo || ' ')
+        FROM mapa_recetas m
+       WHERE m.viejo <> m.nuevo AND fm.motivo LIKE '%receta ' || m.viejo || ' %';
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {

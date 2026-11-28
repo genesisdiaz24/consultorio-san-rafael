@@ -4,21 +4,14 @@
   <!-- ======================================================== -->
   <!-- 🩺 PANEL EXCLUSIVO PARA ROL MÉDICO                      -->
   <!-- ======================================================== -->
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
-    <div>
-      <h1 class="h3 fw-bold text-dark mb-1">
-        <i class="bi bi-stethoscope text-teal me-2"></i>Panel Médico y Atención Clínica
-      </h1>
-      <p class="text-muted mb-0">Atención médica, revisión de historiales clínicos, emisión de recetas y pacientes en espera.</p>
-    </div>
-    <div class="d-flex gap-2">
-      <a href="/citas/sala-espera" class="btn btn-teal btn-sm fw-semibold shadow-sm">
-        <i class="bi bi-bell-fill me-1"></i> Sala de Espera (<%= enEsperaList.length %>)
-      </a>
-    </div>
+  <div class="mb-4">
+    <h1 class="h3 fw-bold text-dark mb-1">
+      <i class="bi bi-stethoscope text-teal me-2"></i>Panel Médico y Atención Clínica
+    </h1>
+    <p class="text-muted mb-0">Pacientes en espera y agenda del día.</p>
   </div>
 
-  <!-- Alerta Activa si hay pacientes esperando -->
+  <!-- Aviso: solo si hay pacientes esperando -->
   <% if (enEsperaList && enEsperaList.length > 0) { %>
     <div class="alert alert-warning border-warning shadow-sm mb-4 p-3 animate-pulse">
       <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -44,9 +37,9 @@
     </div>
   <% } %>
 
-  <!-- Métricas Rápidas del Médico -->
+  <!-- Indicadores del día -->
   <div class="row g-3 mb-4">
-    <div class="col-12 col-sm-6 col-xl-3">
+    <div class="col-12 col-md-4">
       <div class="card card-stat border-0 shadow-sm border-start border-4 border-warning h-100">
         <div class="card-body d-flex align-items-center justify-content-between p-3">
           <div>
@@ -61,46 +54,31 @@
       </div>
     </div>
 
-    <div class="col-12 col-sm-6 col-xl-3">
-      <div class="card card-stat border-0 shadow-sm border-start border-4 border-success h-100">
-        <div class="card-body d-flex align-items-center justify-content-between p-3">
-          <div>
-            <span class="text-muted text-uppercase fs-8 fw-semibold">Consultas de Hoy</span>
-            <h2 class="fw-bold mb-0 text-dark"><%= consultasHoy %></h2>
-            <small class="text-success"><i class="bi bi-calendar-check me-1"></i>Atendidas hoy</small>
-          </div>
-          <div class="stat-icon bg-success-subtle text-success">
-            <i class="bi bi-clipboard2-check-fill"></i>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-      <div class="card card-stat border-0 shadow-sm border-start border-4 border-teal h-100">
-        <div class="card-body d-flex align-items-center justify-content-between p-3">
-          <div>
-            <span class="text-muted text-uppercase fs-8 fw-semibold">Total Consultas</span>
-            <h2 class="fw-bold mb-0 text-dark"><%= totalConsultas %></h2>
-            <small class="text-teal"><i class="bi bi-folder-check me-1"></i>Historial acumulado</small>
-          </div>
-          <div class="stat-icon bg-teal-subtle text-teal">
-            <i class="bi bi-clipboard2-pulse-fill"></i>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
+    <div class="col-12 col-md-4">
       <div class="card card-stat border-0 shadow-sm border-start border-4 border-primary h-100">
         <div class="card-body d-flex align-items-center justify-content-between p-3">
           <div>
-            <span class="text-muted text-uppercase fs-8 fw-semibold">Recetas Emitidas</span>
-            <h2 class="fw-bold mb-0 text-dark"><%= totalRecetas %></h2>
-            <small class="text-primary"><i class="bi bi-prescription me-1"></i>Prescripciones</small>
+            <span class="text-muted text-uppercase fs-8 fw-semibold">Citas de Hoy</span>
+            <h2 class="fw-bold mb-0 text-dark"><%= citasHoy %></h2>
+            <small class="text-primary"><i class="bi bi-calendar3 me-1"></i>Agendadas para hoy</small>
           </div>
           <div class="stat-icon bg-primary-subtle text-primary">
-            <i class="bi bi-file-earmark-medical-fill"></i>
+            <i class="bi bi-calendar2-week-fill"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <div class="card card-stat border-0 shadow-sm border-start border-4 border-success h-100">
+        <div class="card-body d-flex align-items-center justify-content-between p-3">
+          <div>
+            <span class="text-muted text-uppercase fs-8 fw-semibold">Atendidos Hoy</span>
+            <h2 class="fw-bold mb-0 text-dark"><%= atendidosHoy %></h2>
+            <small class="text-success"><i class="bi bi-calendar-check me-1"></i>Consultas realizadas hoy</small>
+          </div>
+          <div class="stat-icon bg-success-subtle text-success">
+            <i class="bi bi-clipboard2-check-fill"></i>
           </div>
         </div>
       </div>
@@ -148,7 +126,17 @@
     </div>
   </div>
 
-  <!-- Tablas Clínicas del Médico -->
+  <%
+    // Color de cada estado de la agenda
+    const ESTILO_ESTADO = {
+      'Pendiente': 'bg-light text-dark border',
+      'En espera': 'bg-warning text-dark',
+      'En consulta': 'bg-primary',
+      'Atendido': 'bg-success',
+      'No asistió': 'bg-danger-subtle text-danger border border-danger',
+    };
+  %>
+
   <div class="row g-4">
     <!-- Pacientes en Sala de Espera -->
     <div class="col-12 col-lg-6">
@@ -178,20 +166,20 @@
                         <div class="fw-semibold text-dark"><%= c.paciente_nombre %> <%= c.paciente_apellido %></div>
                         <small class="text-muted font-monospace"><%= c.identificacion %></small>
                       </td>
-                      <td>
+                      <td class="text-nowrap">
                         <span class="badge bg-warning text-dark"><%= c.minutos_espera || 0 %> min</span>
                       </td>
                       <td>
-                        <% if (c.antecedentes_alergicos) { %>
-                          <span class="badge bg-danger-subtle text-danger border border-danger fs-8">
-                            <%= c.antecedentes_alergicos %>
+                        <% if (tieneAlergias(c.antecedentes_alergicos)) { %>
+                          <span class="badge bg-danger-subtle text-danger border border-danger fs-8 text-wrap text-start">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i><%= c.antecedentes_alergicos %>
                           </span>
                         <% } else { %>
-                          <small class="text-muted fst-italic">Ninguna</small>
+                          <span class="badge bg-light text-secondary border fs-8">Ninguna conocida</span>
                         <% } %>
                       </td>
                       <td class="text-end">
-                        <a href="/consultas/atender?paciente_id=<%= c.paciente_id %>&cita_id=<%= c.id %>" class="btn btn-sm btn-success fw-semibold">
+                        <a href="/consultas/atender?paciente_id=<%= c.paciente_id %>&cita_id=<%= c.id %>" class="btn btn-sm btn-success fw-semibold text-nowrap">
                           <i class="bi bi-stethoscope me-1"></i>Atender
                         </a>
                       </td>
@@ -212,82 +200,47 @@
       </div>
     </div>
 
-    <!-- Atenciones Recientes -->
+    <!-- Agenda de Hoy -->
     <div class="col-12 col-lg-6">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
           <h5 class="fw-bold mb-0 text-dark">
-            <i class="bi bi-clock-history text-teal me-2"></i>Atenciones Recientes
+            <i class="bi bi-calendar3 text-teal me-2"></i>Agenda de Hoy
           </h5>
-          <a href="/consultas" class="btn btn-sm btn-outline-teal">Ver historial</a>
-        </div>
-        <div class="card-body p-0">
-          <div class="list-group list-group-flush">
-            <% if (ultimasConsultas && ultimasConsultas.length > 0) { %>
-              <% ultimasConsultas.forEach(function(con) { %>
-                <a href="/consultas/<%= con.id %>" class="list-group-item list-group-item-action p-3">
-                  <div class="d-flex w-100 justify-content-between align-items-start">
-                    <h6 class="mb-1 fw-bold text-dark"><%= con.paciente_nombre %> <%= con.paciente_apellido %></h6>
-                    <small class="text-muted"><%= formatoFecha(con.fecha_consulta) %></small>
-                  </div>
-                  <p class="mb-1 text-secondary fs-7 text-truncate">
-                    <strong>Dx:</strong> <%= con.diagnostico_clinico %>
-                  </p>
-                  <div class="d-flex justify-content-between align-items-center">
-                    <small class="text-teal fw-semibold"><%= con.servicio_nombre || 'Consulta Médica' %></small>
-                    <span class="badge bg-light text-dark border">Ver detalle &rarr;</span>
-                  </div>
-                </a>
-              <% }); %>
-            <% } else { %>
-              <div class="text-center py-4 text-muted">
-                <i class="bi bi-journal-medical fs-3 d-block mb-1"></i>
-                No hay atenciones recientes registradas.
-              </div>
-            <% } %>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Recetas Médicas Emitidas Recientemente -->
-    <div class="col-12">
-      <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white py-3 border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
-          <h5 class="fw-bold mb-0 text-dark">
-            <i class="bi bi-prescription text-primary me-2"></i>Últimas Recetas Médicas Emitidas
-          </h5>
-          <a href="/consultas/recetas" class="btn btn-sm btn-outline-primary">Ver todas las recetas</a>
+          <span class="text-muted fs-8"><%= new Date().toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo', weekday: 'long', day: 'numeric', month: 'long' }) %></span>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
               <thead class="table-light fs-8 text-uppercase">
                 <tr>
-                  <th>Código</th>
+                  <th>Hora</th>
                   <th>Paciente</th>
-                  <th>Fecha de Emisión</th>
-                  <th class="text-end">Acción</th>
+                  <th>Servicio</th>
+                  <th class="text-end">Estado</th>
                 </tr>
               </thead>
               <tbody>
-                <% if (typeof ultimasRecetas !== 'undefined' && ultimasRecetas && ultimasRecetas.length > 0) { %>
-                  <% ultimasRecetas.forEach(function(rec) { %>
+                <% if (agendaHoy && agendaHoy.length > 0) { %>
+                  <% agendaHoy.forEach(function(a) { %>
+                    <%
+                      const [hh, mm] = String(a.hora).split(':').map(Number);
+                      const hora12 = String(((hh + 11) % 12) + 1).padStart(2, '0') + ':' + String(mm).padStart(2, '0') + (hh < 12 ? ' AM' : ' PM');
+                    %>
                     <tr>
-                      <td class="fw-bold font-monospace text-teal"><%= rec.codigo_receta %></td>
-                      <td class="fw-semibold text-dark"><%= rec.paciente_nombre %> <%= rec.paciente_apellido %></td>
-                      <td class="text-muted fs-7"><%= formatoFecha(rec.fecha_emision) %></td>
-                      <td class="text-end">
-                        <a href="/consultas/recetas/<%= rec.id %>" class="btn btn-sm btn-outline-teal">
-                          <i class="bi bi-printer me-1"></i>Ver Receta
-                        </a>
+                      <td class="fw-bold text-teal font-monospace text-nowrap"><%= hora12 %></td>
+                      <td class="fw-semibold text-dark"><%= a.paciente_nombre %> <%= a.paciente_apellido %></td>
+                      <td class="fs-7 text-secondary"><%= a.servicio_nombre %></td>
+                      <td class="text-end text-nowrap">
+                        <span class="badge <%= ESTILO_ESTADO[a.estado_medico] %>"><%= a.estado_medico %></span>
                       </td>
                     </tr>
                   <% }); %>
                 <% } else { %>
                   <tr>
                     <td colspan="4" class="text-center py-4 text-muted">
-                      No hay recetas médicas emitidas recientemente.
+                      <i class="bi bi-calendar-x fs-3 d-block mb-1"></i>
+                      No hay citas programadas para hoy
                     </td>
                   </tr>
                 <% } %>

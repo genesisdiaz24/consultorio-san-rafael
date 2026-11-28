@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS pacientes (
     antecedentes_personales TEXT,
     antecedentes_alergicos TEXT,
     antecedentes_familiares TEXT,
+    tipo_sangre VARCHAR(5) CONSTRAINT chk_pacientes_tipo_sangre
+        CHECK (tipo_sangre IS NULL OR tipo_sangre IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
+    medicamentos_actuales TEXT,
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -91,6 +94,7 @@ CREATE TABLE IF NOT EXISTS citas (
     motivo TEXT, -- opcional: la secretaria no registra información clínica; el motivo lo anota el médico en la consulta
     estado VARCHAR(30) NOT NULL DEFAULT 'Programada' CHECK (estado IN ('Programada', 'Confirmada', 'En sala de espera', 'Atendida', 'Cancelada')),
     fecha_llegada TIMESTAMP,
+    atencion_iniciada_en TIMESTAMP, -- el médico abrió la atención ("En consulta" en su Agenda de Hoy)
     medico_notificado BOOLEAN DEFAULT false,
     notas_recepcion TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -3,6 +3,24 @@ const { liquidarArs } = require('../../public/js/liquidacion-ars');
 const imecfService = require('../services/imecfService');
 const ecfController = require('./ecfController');
 
+const { TIPOS_SANGRE } = require('../utils/clinica');
+
+/**
+ * Próximo código de receta REC-AAAA-0000, consecutivo por año (hora de RD).
+ * Se llama dentro de la transacción de la consulta; el candado evita que dos consultas
+ * guardadas al mismo tiempo reciban el mismo número.
+ */
+async function siguienteCodigoReceta(client) {
+  const anio = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' }).slice(0, 4);
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`recetas-${anio}`]);
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(SUBSTRING(codigo_receta FROM '^REC-[0-9]{4}-([0-9]+)$')::int), 0) + 1 AS siguiente
+     FROM recetas WHERE codigo_receta LIKE $1`,
+    [`REC-${anio}-%`]
+  );
+  return `REC-${anio}-${String(rows[0].siguiente).padStart(4, '0')}`;
+}
+
 // Nombre del médico (usuarios u) sin la etiqueta final entre paréntesis, p. ej. "Dr. Rafael Morales (Médico)" → "Dr. Rafael Morales"
 const NOMBRE_MEDICO = `REGEXP_REPLACE(u.nombre, '\\s*\\([^)]*\\)\\s*$', '')`;
 
@@ -116,6 +134,16 @@ exports.formularioAtender = async (req, res, next) => {
         [paciente_id]
       );
       if (cAuto.length > 0) cita = cAuto[0];
+    }
+
+    // 2.1 El médico abrió la atención de un paciente en sala: su Agenda de Hoy lo muestra "En consulta".
+    // Solo se registra la hora; el estado de la cita que ven los demás roles no cambia.
+    const rolSesion = req.session && req.session.usuario ? req.session.usuario.rol : '';
+    if (cita && cita.estado === 'En sala de espera' && rolSesion === 'MEDICO') {
+      await db.query(
+        `UPDATE citas SET atencion_iniciada_en = COALESCE(atencion_iniciada_en, CURRENT_TIMESTAMP) WHERE id = $1`,
+        [cita.id]
+      );
     }
 
     // 3. Obtener consultas anteriores del paciente (para revisar antecedentes y evoluciones previas)
@@ -419,6 +447,22 @@ exports.guardar = async (req, res, next) => {
     const { rows: consultaResult } = await client.query(consultaQuery, consultaValues);
     const nuevaConsultaId = consultaResult[0].id;
 
+    // 1.6 Datos del expediente que el médico actualiza al atender (tipo de sangre y medicamentos de uso actual).
+    // Solo si el formulario los trae: así otras rutas que guardan consultas no los borran.
+    if (['MEDICO', 'ADMINISTRADOR'].includes(rolUsuario)) {
+      if (req.body.tipo_sangre !== undefined) {
+        const tipo = String(req.body.tipo_sangre || '').trim();
+        await client.query(`UPDATE pacientes SET tipo_sangre = $1 WHERE id = $2`, [
+          TIPOS_SANGRE.includes(tipo) ? tipo : null,
+          parseInt(paciente_id, 10),
+        ]);
+      }
+      if (req.body.medicamentos_actuales !== undefined) {
+        const meds = String(req.body.medicamentos_actuales || '').trim();
+        await client.query(`UPDATE pacientes SET medicamentos_actuales = $1 WHERE id = $2`, [meds || null, parseInt(paciente_id, 10)]);
+      }
+    }
+
     // 2. Finalizar y actualizar la cita a 'Atendida' para que salga de la sala de espera
     if (finalCitaId) {
       await client.query(
@@ -435,7 +479,7 @@ exports.guardar = async (req, res, next) => {
 
     // 3. Crear Receta si se incluyeron medicamentos
     if (incluye_receta === 'true' || incluye_receta === 'on' || (med_nombre && med_nombre.length > 0)) {
-      const codigoReceta = `REC-${Date.now().toString().slice(-6)}-${nuevaConsultaId}`;
+      const codigoReceta = await siguienteCodigoReceta(client);
 
       const { rows: recetaResult } = await client.query(
         `INSERT INTO recetas (consulta_id, paciente_id, codigo_receta, indicaciones_generales)
@@ -641,8 +685,10 @@ exports.verHistorialPaciente = async (req, res, next) => {
 
     const paciente = pRows[0];
 
+    // Una sola lista: cada consulta con su receta (si se emitió una)
     const { rows: consultas } = await db.query(
-      `SELECT c.*, s.nombre AS servicio_nombre
+      `SELECT c.*, s.nombre AS servicio_nombre,
+              (SELECT r.id FROM recetas r WHERE r.consulta_id = c.id ORDER BY r.id LIMIT 1) AS receta_id
        FROM consultas c
        LEFT JOIN servicios s ON c.servicio_id = s.id
        WHERE c.paciente_id = $1
@@ -650,19 +696,9 @@ exports.verHistorialPaciente = async (req, res, next) => {
       [pacienteId]
     );
 
-    const { rows: recetas } = await db.query(
-      `SELECT r.*, c.fecha_consulta, c.diagnostico_clinico
-       FROM recetas r
-       INNER JOIN consultas c ON r.consulta_id = c.id
-       WHERE r.paciente_id = $1
-       ORDER BY r.fecha_emision DESC, r.id DESC`,
-      [pacienteId]
-    );
-
     res.render('consultas/historial_paciente', {
       paciente,
       consultas,
-      recetas,
       title: `Historial Clínico: ${paciente.nombre} ${paciente.apellido}`,
     });
   } catch (error) {
@@ -673,6 +709,7 @@ exports.verHistorialPaciente = async (req, res, next) => {
 // Listado de Recetas Médicas Emitidas
 exports.listarRecetas = async (req, res, next) => {
   try {
+    // El filtro por texto y fechas se hace en el navegador mientras se escribe; ?q= se mantiene por compatibilidad
     const { q } = req.query;
     let queryText = `
       SELECT r.*,
@@ -680,9 +717,8 @@ exports.listarRecetas = async (req, res, next) => {
              p.nombre as paciente_nombre,
              p.apellido as paciente_apellido,
              p.identificacion as paciente_identificacion,
-             COUNT(rd.id) as total_medicamentos,
-             COUNT(CASE WHEN rd.estado_dispensacion = 'Entregado' THEN 1 END) as total_entregados,
-             COUNT(CASE WHEN rd.estado_dispensacion IN ('No entregado', 'No entregado - Sin existencias') THEN 1 END) as total_no_entregados
+             COUNT(rd.id)::int as total_medicamentos,
+             TO_CHAR(r.fecha_emision::timestamptz AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') as fecha_iso
       FROM recetas r
       INNER JOIN consultas c ON r.consulta_id = c.id
       INNER JOIN pacientes p ON r.paciente_id = p.id
@@ -695,7 +731,7 @@ exports.listarRecetas = async (req, res, next) => {
       queryText += ` AND (p.nombre ILIKE $1 OR p.apellido ILIKE $1 OR p.identificacion ILIKE $1 OR r.codigo_receta ILIKE $1 OR c.diagnostico_clinico ILIKE $1)`;
     }
     queryText += ` GROUP BY r.id, c.diagnostico_clinico, p.nombre, p.apellido, p.identificacion
-                   ORDER BY r.fecha_emision DESC, r.id DESC LIMIT 100`;
+                   ORDER BY r.fecha_emision DESC, r.id DESC LIMIT 2000`;
 
     const { rows: recetas } = await db.query(queryText, params);
     res.render('consultas/recetas', {

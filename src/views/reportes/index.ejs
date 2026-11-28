@@ -25,6 +25,44 @@
   <% }); %>
 </div>
 
+<% if (typeof totalesClinicos !== 'undefined' && totalesClinicos) { %>
+  <!-- Totales clínicos acumulados -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3">
+      <a href="/reportes/consultas-periodo" class="text-decoration-none">
+        <div class="card card-stat border-0 shadow-sm border-start border-4 border-teal h-100">
+          <div class="card-body d-flex align-items-center justify-content-between p-3">
+            <div>
+              <span class="text-muted text-uppercase fs-8 fw-semibold">Total Consultas</span>
+              <h2 class="fw-bold mb-0 text-dark"><%= totalesClinicos.consultas %></h2>
+              <small class="text-teal"><i class="bi bi-folder-check me-1"></i>Historial acumulado</small>
+            </div>
+            <div class="stat-icon bg-teal-subtle text-teal">
+              <i class="bi bi-clipboard2-pulse-fill"></i>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+      <a href="/reportes/recetas-emitidas" class="text-decoration-none">
+        <div class="card card-stat border-0 shadow-sm border-start border-4 border-primary h-100">
+          <div class="card-body d-flex align-items-center justify-content-between p-3">
+            <div>
+              <span class="text-muted text-uppercase fs-8 fw-semibold">Recetas Emitidas</span>
+              <h2 class="fw-bold mb-0 text-dark"><%= totalesClinicos.recetas %></h2>
+              <small class="text-primary"><i class="bi bi-prescription me-1"></i>Prescripciones</small>
+            </div>
+            <div class="stat-icon bg-primary-subtle text-primary">
+              <i class="bi bi-file-earmark-medical-fill"></i>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+<% } %>
+
 <% if (modulos.length === 0) { %>
   <div class="alert alert-info">Su rol no tiene reportes asignados.</div>
 <% } %>

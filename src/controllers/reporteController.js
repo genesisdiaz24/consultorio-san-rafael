@@ -116,21 +116,35 @@ function resumenFiltros(definiciones) {
 // ---------------------------------------------------------------------
 // GET /reportes → Centro de reportes con los módulos que el rol puede ver
 // ---------------------------------------------------------------------
-exports.index = (req, res) => {
-  const rol = rolDe(req);
-  const modulos = MODULOS.map((m) => ({
-    ...m,
-    reportes: REPORTES.filter((r) => r.modulo === m.id && puedeVer(rol, r)),
-  })).filter((m) => m.reportes.length > 0);
+exports.index = async (req, res, next) => {
+  try {
+    const rol = rolDe(req);
+    const modulos = MODULOS.map((m) => ({
+      ...m,
+      reportes: REPORTES.filter((r) => r.modulo === m.id && puedeVer(rol, r)),
+    })).filter((m) => m.reportes.length > 0);
 
-  res.render('reportes/index', {
-    title: 'Reportes - Consultorio Médico San Rafael',
-    modulos,
-    totalReportes: modulos.reduce((n, m) => n + m.reportes.length, 0),
-    totalSistema: REPORTES.length,
-    modulosSistema: MODULOS.length,
-    esAdmin: rol === 'ADMINISTRADOR',
-  });
+    // Totales clínicos (antes en el panel del médico) para quien ve el módulo de Consultas
+    let totalesClinicos = null;
+    if (modulos.some((m) => m.id === 'consultas')) {
+      const { rows } = await db.query(
+        `SELECT (SELECT COUNT(*) FROM consultas)::int AS consultas, (SELECT COUNT(*) FROM recetas)::int AS recetas`
+      );
+      totalesClinicos = rows[0];
+    }
+
+    res.render('reportes/index', {
+      totalesClinicos,
+      title: 'Reportes - Consultorio Médico San Rafael',
+      modulos,
+      totalReportes: modulos.reduce((n, m) => n + m.reportes.length, 0),
+      totalSistema: REPORTES.length,
+      modulosSistema: MODULOS.length,
+      esAdmin: rol === 'ADMINISTRADOR',
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 // ---------------------------------------------------------------------

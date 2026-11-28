@@ -21,50 +21,49 @@ router.get('/', async (req, res, next) => {
         ORDER BY c.fecha_llegada ASC
       `);
 
-      // Consultas atendidas hoy
-      const { rows: cHoy } = await db.query(
-        `SELECT COUNT(*) FROM consultas WHERE DATE(fecha_consulta) = CURRENT_DATE`
+      // "Hoy" en hora de República Dominicana (la base de la nube guarda los timestamps en UTC)
+      const HOY = `(NOW() AT TIME ZONE 'America/Santo_Domingo')::date`;
+      const AHORA_RD = `(NOW() AT TIME ZONE 'America/Santo_Domingo')`;
+
+      // Agenda de hoy ordenada por hora, con el estado que ve el médico.
+      // El consultorio tiene un solo médico: la agenda del día es la suya.
+      const { rows: agendaHoy } = await db.query(`
+        SELECT c.id, c.paciente_id, c.hora, c.estado,
+               p.nombre AS paciente_nombre, p.apellido AS paciente_apellido,
+               COALESCE(s.nombre, 'Consulta General') AS servicio_nombre,
+               CASE
+                 WHEN c.estado = 'Atendida' THEN 'Atendido'
+                 WHEN c.estado = 'En sala de espera' AND c.atencion_iniciada_en IS NOT NULL THEN 'En consulta'
+                 WHEN c.estado = 'En sala de espera' THEN 'En espera'
+                 WHEN c.estado = 'Cancelada' THEN 'No asistió'
+                 WHEN (c.fecha + c.hora + INTERVAL '1 hour') < ${AHORA_RD} THEN 'No asistió'
+                 ELSE 'Pendiente'
+               END AS estado_medico
+        FROM citas c
+        INNER JOIN pacientes p ON p.id = c.paciente_id
+        LEFT JOIN servicios s ON s.id = c.servicio_id
+        WHERE c.fecha = ${HOY}
+        ORDER BY c.hora ASC, c.id ASC
+      `);
+
+      // Citas de hoy (sin las canceladas)
+      const citasHoy = agendaHoy.filter((c) => c.estado !== 'Cancelada').length;
+
+      // Pacientes atendidos hoy por este médico
+      const { rows: aHoy } = await db.query(
+        `SELECT COUNT(*)::int AS n FROM consultas
+         WHERE medico_id = $1
+           AND (fecha_consulta::timestamptz AT TIME ZONE 'America/Santo_Domingo')::date = ${HOY}`,
+        [req.session.usuario.id]
       );
-      const consultasHoy = parseInt(cHoy[0].count, 10);
-
-      // Total histórico de consultas
-      const { rows: cTot } = await db.query(`SELECT COUNT(*) FROM consultas`);
-      const totalConsultas = parseInt(cTot[0].count, 10);
-
-      // Total recetas emitidas
-      const { rows: rTot } = await db.query(`SELECT COUNT(*) FROM recetas`);
-      const totalRecetas = parseInt(rTot[0].count, 10);
-
-      // Últimas consultas médicas realizadas (atenciones y diagnósticos)
-      const { rows: ultimasConsultas } = await db.query(`
-        SELECT c.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido, p.identificacion,
-               s.nombre as servicio_nombre
-        FROM consultas c
-        INNER JOIN pacientes p ON c.paciente_id = p.id
-        LEFT JOIN servicios s ON c.servicio_id = s.id
-        ORDER BY c.fecha_consulta DESC, c.id DESC LIMIT 6
-      `);
-
-      // Últimas recetas prescritas
-      const { rows: ultimasRecetas } = await db.query(`
-        SELECT r.*, c.diagnostico_clinico, p.nombre as paciente_nombre, p.apellido as paciente_apellido,
-               COUNT(rd.id) as total_medicamentos
-        FROM recetas r
-        INNER JOIN consultas c ON r.consulta_id = c.id
-        INNER JOIN pacientes p ON r.paciente_id = p.id
-        LEFT JOIN receta_detalles rd ON rd.receta_id = r.id
-        GROUP BY r.id, c.diagnostico_clinico, p.nombre, p.apellido
-        ORDER BY r.fecha_emision DESC, r.id DESC LIMIT 6
-      `);
+      const atendidosHoy = aHoy[0].n;
 
       return res.render('index', {
         rol,
         enEsperaList,
-        consultasHoy,
-        totalConsultas,
-        totalRecetas,
-        ultimasConsultas,
-        ultimasRecetas,
+        agendaHoy,
+        citasHoy,
+        atendidosHoy,
         title: 'Panel Médico - Consultorio San Rafael',
       });
     }
