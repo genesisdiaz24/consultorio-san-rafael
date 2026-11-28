@@ -1,7 +1,5 @@
 <%- include('../partials/header') %>
 
-
-
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
   <div>
     <h1 class="h3 fw-bold text-dark mb-1">
@@ -9,18 +7,149 @@
     </h1>
     <p class="text-muted mb-0">Control de existencias, lotes, fechas de vencimiento y estimación de demanda con IA.</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex flex-wrap gap-2">
     <button type="button" class="btn btn-teal fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoMedicamento">
       <i class="bi bi-plus-circle me-1"></i> Nuevo Medicamento
     </button>
     <a href="/farmacia/dispensar" class="btn btn-outline-primary fw-semibold">
       <i class="bi bi-check2-circle me-1"></i> Despachar Recetas
     </a>
+    <button id="btnConsultarIa" type="button" class="btn btn-outline-teal fw-semibold" onclick="consultarIa()" aria-controls="seccionIa">
+      <i class="bi bi-robot me-1"></i> Consultar IA
+    </button>
+  </div>
+</div>
+
+<!-- Filtros de Inventario (en tiempo real) -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-3">
+    <div class="row g-2 align-items-center">
+      <div class="col-12 col-md-6 col-lg-7">
+        <div class="input-group">
+          <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+          <input type="search" id="filtroInventario" value="<%= q %>" class="form-control border-start-0" placeholder="Buscar medicamento por nombre, código o principio activo..." autocomplete="off">
+        </div>
+      </div>
+      <div class="col-8 col-md-4 col-lg-3">
+        <select id="filtroEstado" class="form-select" aria-label="Filtrar por estado">
+          <option value="">Todos los estados</option>
+          <option value="disponible" <%= estado === 'disponible' ? 'selected' : '' %>>Disponibles</option>
+          <option value="bajo" <%= estado === 'bajo' ? 'selected' : '' %>>Stock Bajo (Alerta)</option>
+          <option value="agotado" <%= estado === 'agotado' ? 'selected' : '' %>>Agotados (Stock 0)</option>
+          <option value="proximo" <%= estado === 'proximo' ? 'selected' : '' %>>Próximos a vencer (≤ 90 días)</option>
+          <option value="vencido" <%= estado === 'vencido' ? 'selected' : '' %>>Vencidos</option>
+        </select>
+      </div>
+      <div class="col-4 col-md-2 col-lg-2 text-end">
+        <span class="fs-7 text-muted" id="contadorInventario"><%= medicamentos.length %> medicamento(s)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabla de Inventario -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light fs-8 text-uppercase">
+          <tr>
+            <th>Código</th>
+            <th>Medicamento &amp; Concentración</th>
+            <th>Presentación</th>
+            <th class="text-end text-nowrap">Precio unit.</th>
+            <th class="text-center">Existencias</th>
+            <th class="text-center text-nowrap">Stock mínimo</th>
+            <th>Lote / Vencimiento</th>
+            <th>Ubicación</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaInventario">
+          <% if (medicamentos && medicamentos.length > 0) { %>
+            <% medicamentos.forEach(function(m) { %>
+              <%
+                const stock = parseInt(m.stock_actual, 10) || 0;
+                const minimo = parseInt(m.stock_minimo, 10) || 0;
+                const estadoStock = stock <= 0 ? 'agotado' : (stock <= minimo ? 'bajo' : 'disponible');
+                const dias = m.dias_para_vencer === null || m.dias_para_vencer === undefined ? null : parseInt(m.dias_para_vencer, 10);
+                const estadoVenc = dias === null ? '' : (dias < 0 ? 'vencido' : (dias <= 90 ? 'proximo' : ''));
+              %>
+              <tr data-estado="<%= estadoStock %>" data-vencimiento="<%= estadoVenc %>"
+                  data-texto="<%= [m.codigo, m.nombre, m.principio_activo, m.concentracion, m.lote].join(' ') %>">
+                <td>
+                  <span class="badge bg-light text-dark border font-monospace fs-8"><%= m.codigo %></span>
+                </td>
+                <td>
+                  <strong class="text-dark d-block"><%= m.nombre %></strong>
+                  <small class="text-muted"><%= m.principio_activo || '' %> &bull; <%= m.concentracion || '' %></small>
+                </td>
+                <td>
+                  <span class="badge bg-light text-dark border"><%= m.presentacion %></span>
+                </td>
+                <td class="text-end fw-semibold text-nowrap">
+                  <%= Number(m.precio_unitario) > 0 ? formatoMoneda(m.precio_unitario) : '—' %>
+                </td>
+                <td class="text-center text-nowrap">
+                  <% if (estadoStock === 'agotado') { %>
+                    <span class="badge bg-danger py-2 px-3 fs-7"><i class="bi bi-x-circle me-1"></i> Agotado (0)</span>
+                  <% } else if (estadoStock === 'bajo') { %>
+                    <span class="badge bg-warning text-dark py-2 px-3 fs-7"><i class="bi bi-exclamation-triangle me-1"></i> <%= stock %> unid. (Bajo)</span>
+                  <% } else { %>
+                    <span class="badge bg-success-subtle text-success border border-success py-2 px-3 fs-7 fw-bold"><i class="bi bi-check-circle me-1"></i> <%= stock %> unid.</span>
+                  <% } %>
+                </td>
+                <td class="text-center fw-semibold text-secondary text-nowrap"><%= minimo %> unid.</td>
+                <td class="text-nowrap">
+                  <div class="fs-8">Lote: <strong class="font-monospace"><%= m.lote || 'No registrado' %></strong></div>
+                  <small class="<%= estadoVenc === 'vencido' ? 'text-danger fw-semibold' : 'text-muted' %>">Vence: <%= m.fecha_vencimiento ? formatoFecha(m.fecha_vencimiento) : 'No registrado' %></small>
+                  <% if (estadoVenc === 'vencido') { %>
+                    <div class="mt-1"><span class="badge bg-danger"><i class="bi bi-calendar-x me-1"></i>Vencido</span></div>
+                  <% } else if (estadoVenc === 'proximo') { %>
+                    <div class="mt-1"><span class="badge bg-warning text-dark"><i class="bi bi-calendar-event me-1"></i>Próximo a vencer · <%= dias %> <%= dias === 1 ? 'día' : 'días' %></span></div>
+                  <% } %>
+                </td>
+                <td>
+                  <small class="text-secondary text-nowrap"><i class="bi bi-geo-alt me-1"></i><%= m.ubicacion || 'General' %></small>
+                </td>
+                <td class="text-end">
+                  <div class="d-flex flex-column align-items-end gap-1">
+                  <button type="button" class="btn btn-sm btn-outline-teal text-nowrap"
+                          data-id="<%= m.id %>" data-nombre="<%= m.nombre %>" data-stock="<%= stock %>" data-lote="<%= m.lote || '' %>"
+                          onclick="abrirModalMovimiento(this.dataset)">
+                    <i class="bi bi-arrow-left-right me-1"></i> Movimiento de Stock
+                  </button>
+                  <a href="/farmacia/inventario/<%= m.id %>/coberturas" class="btn btn-sm btn-outline-secondary text-nowrap">
+                    <i class="bi bi-shield-check me-1"></i> Cobertura ARS
+                  </a>
+                  </div>
+                </td>
+              </tr>
+            <% }); %>
+            <tr id="filaSinInventario" class="d-none">
+              <td colspan="9" class="text-center py-5 text-muted">
+                <i class="bi bi-search fs-1 d-block mb-2 text-teal-light"></i>
+                Ningún medicamento coincide con la búsqueda o el estado elegido.
+              </td>
+            </tr>
+          <% } else { %>
+            <tr>
+              <td colspan="9" class="text-center py-5 text-muted">
+                <i class="bi bi-capsule fs-1 d-block mb-2 text-teal-light"></i>
+                <h6 class="fw-bold text-dark">No hay medicamentos encontrados</h6>
+                <p class="mb-3">Agregue medicamentos al catálogo para comenzar la gestión de stock.</p>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <!-- Asistente de IA: Estimación de Demanda y Sugerencias de Reposición (Bajo Demanda) -->
-<div class="card border-0 shadow-sm mb-4" id="panel-ia-farmacia">
+<div class="collapse mt-4" id="seccionIa">
+<div class="card border-0 shadow-sm" id="panel-ia-farmacia">
   <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
       <h5 class="fw-bold mb-0 text-dark">
@@ -28,36 +157,11 @@
       </h5>
       <small class="text-muted fs-8">Proyección de consumo a partir del historial real de recetas entregadas &bull; Modo consultivo</small>
     </div>
-    <div class="d-flex align-items-center gap-2">
-      <a href="/farmacia/chat" class="btn btn-outline-teal fw-semibold">
-        <i class="bi bi-chat-dots me-1"></i> Chat Box Asistente IA
-      </a>
-      <button id="btnConsultarIa" type="button" class="btn btn-teal fw-semibold shadow-sm" onclick="consultarIa()">
-        <i class="bi bi-robot me-1"></i> Consultar IA
-      </button>
-      <button id="btnOcultarIa" type="button" class="btn btn-outline-secondary btn-sm fw-semibold d-none" onclick="ocultarResultadosIa()">
-        <i class="bi bi-eye-slash me-1"></i> Ocultar Análisis
-      </button>
-    </div>
+    <button id="btnOcultarIa" type="button" class="btn btn-outline-secondary btn-sm fw-semibold" onclick="ocultarResultadosIa()">
+      <i class="bi bi-chevron-up me-1"></i> Ocultar análisis
+    </button>
   </div>
   <div class="card-body p-4">
-    <!-- Estado Inicial: En espera (No ejecutado automáticamente) -->
-    <div id="iaEstadoInicial" class="text-center py-4 px-3 bg-light rounded-3 border">
-      <div class="mb-3">
-        <i class="bi bi-cpu fs-1 text-teal"></i>
-      </div>
-      <h6 class="fw-bold text-dark mb-2">Análisis de IA en espera</h6>
-      <p class="text-muted mb-3 fs-7" id="mensajeGuiaIa">Presiona Consultar IA para generar una estimación de demanda o interactúa directamente con el Chat Box de Farmacia</p>
-      <div class="d-flex justify-content-center gap-2">
-        <button type="button" class="btn btn-outline-teal btn-sm fw-semibold px-3" onclick="consultarIa()">
-          <i class="bi bi-play-circle me-1"></i> Consultar IA
-        </button>
-        <a href="/farmacia/chat" class="btn btn-teal btn-sm fw-semibold px-3 shadow-sm">
-          <i class="bi bi-chat-dots me-1"></i> Escribir en Chat Box IA
-        </a>
-      </div>
-    </div>
-
     <!-- Estado Cargando: Spinner activo mientras consulta el endpoint -->
     <div id="iaEstadoCargando" class="d-none text-center py-5">
       <div class="spinner-border text-teal mb-3" role="status" style="width: 2.5rem; height: 2.5rem;">
@@ -145,118 +249,6 @@
     </div>
   </div>
 </div>
-
-<!-- Filtros de Inventario -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body p-3">
-    <form action="/farmacia/inventario" method="GET" class="row g-2 align-items-center">
-      <div class="col-12 col-md-6 col-lg-7">
-        <div class="input-group">
-          <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-          <input type="text" name="q" value="<%= q %>" class="form-control border-start-0" placeholder="Buscar medicamento por nombre, código o principio activo...">
-        </div>
-      </div>
-      <div class="col-6 col-md-4 col-lg-3">
-        <select name="estado" class="form-select" onchange="this.form.submit()">
-          <option value="">Todos los estados</option>
-          <option value="bajo" <%= estado === 'bajo' ? 'selected' : '' %>>Stock Bajo (Alerta)</option>
-          <option value="agotado" <%= estado === 'agotado' ? 'selected' : '' %>>Agotados (Stock 0)</option>
-        </select>
-      </div>
-      <div class="col-6 col-md-2 col-lg-2 d-grid">
-        <button type="submit" class="btn btn-teal fw-semibold">
-          <i class="bi bi-funnel me-1"></i> Filtrar
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Tabla de Inventario -->
-<div class="card border-0 shadow-sm">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light fs-8 text-uppercase">
-          <tr>
-            <th>Código</th>
-            <th>Medicamento &amp; Concentración</th>
-            <th>Presentación</th>
-            <th class="text-end">Precio unit.</th>
-            <th class="text-center">Existencias</th>
-            <th class="text-center">Sugerencia IA</th>
-            <th>Lote / Vencimiento</th>
-            <th>Ubicación</th>
-            <th class="text-end">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (medicamentos && medicamentos.length > 0) { %>
-            <% medicamentos.forEach(function(m) { %>
-              <tr>
-                <td>
-                  <span class="badge bg-light text-dark border font-monospace fs-8">
-                    <%= m.codigo %>
-                  </span>
-                </td>
-                <td>
-                  <strong class="text-dark d-block"><%= m.nombre %></strong>
-                  <small class="text-muted"><%= m.principio_activo || '' %> &bull; <%= m.concentracion || '' %></small>
-                </td>
-                <td>
-                  <span class="badge bg-light text-dark border"><%= m.presentacion %></span>
-                </td>
-                <td class="text-end fw-semibold">
-                  <%= Number(m.precio_unitario) > 0 ? formatoMoneda(m.precio_unitario) : '—' %>
-                </td>
-                <td class="text-center">
-                  <% if (m.stock_actual <= 0) { %>
-                    <span class="badge bg-danger py-2 px-3 fs-7">
-                      <i class="bi bi-x-circle me-1"></i> Agotado (0)
-                    </span>
-                  <% } else if (m.stock_actual <= m.stock_minimo) { %>
-                    <span class="badge bg-warning text-dark py-2 px-3 fs-7">
-                      <i class="bi bi-exclamation-triangle me-1"></i> <%= m.stock_actual %> unid. (Bajo)
-                    </span>
-                  <% } else { %>
-                    <span class="badge bg-success-subtle text-success border border-success py-2 px-3 fs-7 fw-bold">
-                      <i class="bi bi-check-circle me-1"></i> <%= m.stock_actual %> unid.
-                    </span>
-                  <% } %>
-                </td>
-                <td class="text-center celda-sugerencia-ia" id="sug-ia-<%= m.id %>" data-med-id="<%= m.id %>">
-                  <span class="text-muted fs-8" title="Presiona 'Consultar IA' para calcular estimación"><i class="bi bi-dash"></i></span>
-                </td>
-                <td>
-                  <div class="fs-8">Lote: <strong><%= m.lote || 'N/A' %></strong></div>
-                  <small class="text-muted">Vence: <%= formatoFecha(m.fecha_vencimiento) %></small>
-                </td>
-                <td>
-                  <small class="text-secondary"><i class="bi bi-geo-alt me-1"></i><%= m.ubicacion || 'General' %></small>
-                </td>
-                <td class="text-end">
-                  <button type="button" class="btn btn-sm btn-outline-teal" data-id="<%= m.id %>" data-nombre="<%= m.nombre %>" data-stock="<%= m.stock_actual %>" onclick="abrirModalAjustar(this.dataset.id, this.dataset.nombre, this.dataset.stock)">
-                    <i class="bi bi-plus-slash-minus me-1"></i> Ajustar Stock
-                  </button>
-                  <a href="/farmacia/inventario/<%= m.id %>/coberturas" class="btn btn-sm btn-outline-secondary mt-1 mt-xl-0">
-                    <i class="bi bi-shield-check me-1"></i> Cobertura ARS
-                  </a>
-                </td>
-              </tr>
-            <% }); %>
-          <% } else { %>
-            <tr>
-              <td colspan="9" class="text-center py-5 text-muted">
-                <i class="bi bi-capsule fs-1 d-block mb-2 text-teal-light"></i>
-                <h6 class="fw-bold text-dark">No hay medicamentos encontrados</h6>
-                <p class="mb-3">Agregue medicamentos al catálogo para comenzar la gestión de stock.</p>
-              </td>
-            </tr>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-  </div>
 </div>
 
 <!-- Modal: Registrar Nuevo Medicamento -->
@@ -336,49 +328,157 @@
   </div>
 </div>
 
-<!-- Modal: Ajustar Stock -->
-<div class="modal fade" id="modalAjustarStock" tabindex="-1" aria-hidden="true">
+
+<!-- Modal: Movimiento de Stock -->
+<div class="modal fade" id="modalMovimientoStock" tabindex="-1" aria-hidden="true" aria-labelledby="tituloMovimientoStock">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form id="formAjustarStock" method="POST">
+      <form id="formMovimientoStock" method="POST" class="needs-validation sin-check-valido" novalidate>
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="modal-header bg-teal text-white">
-          <h5 class="modal-title fw-bold"><i class="bi bi-box-arrow-in-down me-2"></i>Reabastecer Medicamento</h5>
+          <h5 class="modal-title fw-bold" id="tituloMovimientoStock"><i class="bi bi-arrow-left-right me-2"></i>Movimiento de Stock</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body p-4">
           <div class="mb-3">
-            <label class="form-label text-muted fs-8 text-uppercase fw-semibold">Medicamento</label>
-            <div class="fw-bold fs-6 text-dark" id="modalMedNombre"></div>
-            <small class="text-secondary" id="modalMedStockActual"></small>
+            <label class="form-label text-muted fs-8 text-uppercase fw-semibold mb-0">Medicamento</label>
+            <div class="fw-bold fs-6 text-dark" id="movMedNombre"></div>
+            <small class="text-secondary" id="movMedStock"></small>
           </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold fs-7">Cantidad de unidades a agregar <span class="text-danger">*</span></label>
-            <input type="number" name="cantidad_agregar" class="form-control" min="1" placeholder="Ej: 50" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold fs-7">Motivo del ajuste</label>
-            <input type="text" name="motivo" class="form-control" placeholder="Ej: Compra de lote nuevo / donación de laboratorio...">
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label for="movTipo" class="form-label fw-semibold fs-7">Tipo de movimiento <span class="text-danger">*</span></label>
+              <select name="tipo" id="movTipo" class="form-select" required>
+                <option value="">Seleccione...</option>
+                <option value="ENTRADA">Entrada (compra / donación)</option>
+                <option value="SALIDA">Salida por ajuste (dañado, vencido, pérdida)</option>
+              </select>
+              <div class="invalid-feedback">Seleccione el tipo de movimiento.</div>
+            </div>
+
+            <div class="col-12 col-sm-5">
+              <label for="movCantidad" class="form-label fw-semibold fs-7">Cantidad <span class="text-danger">*</span></label>
+              <input type="number" name="cantidad" id="movCantidad" class="form-control" min="1" step="1" placeholder="Ej: 50" required>
+              <div class="invalid-feedback" id="movCantidadError">Indique una cantidad mayor que cero.</div>
+            </div>
+
+            <!-- Solo para entradas -->
+            <div class="col-12 col-sm-7 campos-entrada d-none">
+              <label for="movLote" class="form-label fw-semibold fs-7">Número de lote <span class="text-danger">*</span></label>
+              <input type="text" name="lote" id="movLote" class="form-control font-monospace" maxlength="50" placeholder="Ej: LOT-2026-015">
+              <div class="invalid-feedback">Indique el número de lote.</div>
+            </div>
+            <div class="col-12 campos-entrada d-none">
+              <label for="movVencimiento" class="form-label fw-semibold fs-7">Fecha de vencimiento <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" name="fecha_vencimiento" id="movVencimiento" class="form-control"
+                       placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="off"
+                       data-campo-fecha data-min="hoy" data-max="2060-12-31" data-nombre="La fecha de vencimiento">
+                <button type="button" class="btn btn-outline-secondary" data-abrir-calendario title="Abrir calendario" aria-label="Abrir calendario">
+                  <i class="bi bi-calendar-event"></i>
+                </button>
+              </div>
+              <div class="invalid-feedback"></div>
+              <div class="form-text fs-8 text-muted">Escriba con el teclado (ej: 31/12/2027) o elija en el calendario.</div>
+            </div>
+
+            <div class="col-12">
+              <label for="movMotivo" class="form-label fw-semibold fs-7">Motivo <span class="text-danger">*</span></label>
+              <input type="text" name="motivo" id="movMotivo" class="form-control" maxlength="250" required
+                     placeholder="Ej: Compra a proveedor / Blíster dañado / Producto vencido">
+              <div class="invalid-feedback">Indique el motivo del movimiento.</div>
+            </div>
           </div>
         </div>
         <div class="modal-footer bg-light">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-teal fw-semibold">Actualizar Existencias</button>
+          <button type="submit" class="btn btn-teal fw-semibold">Registrar Movimiento</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<script src="/js/campo-fecha.js"></script>
 <script>
-function abrirModalAjustar(id, nombre, stock) {
-  document.getElementById('formAjustarStock').action = `/farmacia/inventario/${id}/ajustar`;
-  document.getElementById('modalMedNombre').innerText = nombre;
-  document.getElementById('modalMedStockActual').innerText = `Stock actual disponible: ${stock} unidades`;
-  const modal = new bootstrap.Modal(document.getElementById('modalAjustarStock'));
-  modal.show();
+// ===== Movimiento de Stock =====
+let stockMovimiento = 0;
+function abrirModalMovimiento(datos) {
+  const form = document.getElementById('formMovimientoStock');
+  form.reset();
+  form.classList.remove('was-validated');
+  form.querySelectorAll('.is-invalid').forEach((e) => e.classList.remove('is-invalid'));
+  form.querySelectorAll('.invalid-feedback.d-block').forEach((e) => e.classList.remove('d-block'));
+  form.action = `/farmacia/inventario/${datos.id}/ajustar`;
+  stockMovimiento = parseInt(datos.stock, 10) || 0;
+  document.getElementById('movMedNombre').textContent = datos.nombre;
+  document.getElementById('movMedStock').textContent = `Existencias actuales: ${stockMovimiento} unidad(es) · Lote actual: ${datos.lote || 'No registrado'}`;
+  alternarCamposEntrada();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalMovimientoStock')).show();
 }
 
+// Lote y vencimiento solo existen (y son obligatorios) en las entradas
+function alternarCamposEntrada() {
+  const entrada = document.getElementById('movTipo').value === 'ENTRADA';
+  document.querySelectorAll('.campos-entrada').forEach((c) => c.classList.toggle('d-none', !entrada));
+  ['movLote', 'movVencimiento'].forEach((id) => {
+    const el = document.getElementById(id);
+    el.toggleAttribute('required', entrada);
+    if (!entrada) { el.value = ''; el.setCustomValidity(''); el.classList.remove('is-invalid'); }
+  });
+  validarCantidad();
+}
+
+// Una salida no puede dejar el stock en negativo
+function validarCantidad() {
+  const input = document.getElementById('movCantidad');
+  const msg = document.getElementById('movCantidadError');
+  const cant = Number(input.value);
+  let error = '';
+  if (input.value !== '' && (!Number.isInteger(cant) || cant <= 0)) error = 'Indique una cantidad entera mayor que cero.';
+  else if (document.getElementById('movTipo').value === 'SALIDA' && cant > stockMovimiento) {
+    error = `La salida no puede ser mayor que las existencias (${stockMovimiento}).`;
+  }
+  input.setCustomValidity(error);
+  msg.textContent = error || 'Indique una cantidad mayor que cero.';
+  input.classList.toggle('is-invalid', Boolean(error));
+}
+
+document.getElementById('movTipo').addEventListener('change', alternarCamposEntrada);
+document.getElementById('movCantidad').addEventListener('input', validarCantidad);
+document.getElementById('formMovimientoStock').addEventListener('submit', validarCantidad, true);
+
+// ===== Filtro del inventario en tiempo real =====
+(function () {
+  const texto = document.getElementById('filtroInventario');
+  const estado = document.getElementById('filtroEstado');
+  const contador = document.getElementById('contadorInventario');
+  const sinFilas = document.getElementById('filaSinInventario');
+  const filas = Array.from(document.querySelectorAll('#tablaInventario tr[data-estado]'));
+  const limpiar = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  filas.forEach((f) => { f.dataset.busqueda = limpiar(f.dataset.texto); });
+
+  function filtrar() {
+    const palabras = limpiar(texto.value).split(/\s+/).filter(Boolean);
+    const e = estado.value;
+    let visibles = 0;
+    filas.forEach((f) => {
+      const coincideEstado = !e || f.dataset.estado === e || f.dataset.vencimiento === e;
+      const ok = coincideEstado && palabras.every((p) => f.dataset.busqueda.includes(p));
+      f.classList.toggle('d-none', !ok);
+      if (ok) visibles++;
+    });
+    if (sinFilas) sinFilas.classList.toggle('d-none', visibles > 0);
+    contador.textContent = `${visibles} medicamento(s)`;
+  }
+  texto.addEventListener('input', filtrar);
+  estado.addEventListener('change', filtrar);
+  filtrar();
+})();
+</script>
+
+<script>
 /**
  * Consulta de IA bajo demanda para Inventario de Farmacia
  * Consultorio Médico San Rafael
@@ -398,6 +498,10 @@ async function consultarIa() {
   const estadoError = document.getElementById('iaEstadoError');
 
   if (!btn) return;
+
+  // La sección de IA está plegada: se despliega al pulsar "Consultar IA"
+  bootstrap.Collapse.getOrCreateInstance(document.getElementById('seccionIa'), { toggle: false }).show();
+  document.getElementById('seccionIa').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   // Actualizar estado visual a "Cargando..."
   btn.disabled = true;
@@ -434,7 +538,7 @@ async function consultarIa() {
     if (btnOcultar) btnOcultar.classList.remove('d-none');
 
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Actualizar Análisis';
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Actualizar IA';
   } catch (err) {
     console.error('[IA Farmacia Error]:', err);
     if (estadoCargando) estadoCargando.classList.add('d-none');
@@ -586,51 +690,17 @@ function renderizarResultadosIa(data) {
 
       tbody.appendChild(tr);
 
-      // Actualizar también la fila correspondiente en la tabla principal de inventario
-      const celdaPrincipal = document.getElementById('sug-ia-' + med.id);
-      if (celdaPrincipal) {
-        if (est.datosSuficientes) {
-          if (est.cantidadSugerida > 0) {
-            celdaPrincipal.innerHTML = `<span class="badge bg-primary fs-8" title="Demanda proyectada: ${est.demandaProyectada30d} unid."><i class="bi bi-cart-plus me-1"></i>+${est.cantidadSugerida} sugeridas</span>`;
-          } else {
-            celdaPrincipal.innerHTML = `<span class="badge bg-success-subtle text-success border border-success fs-8"><i class="bi bi-check2 me-1"></i>Suficiente</span>`;
-          }
-        } else {
-          celdaPrincipal.innerHTML = `
-            <span class="badge bg-warning-subtle text-dark border border-warning fs-9 d-block" title="${escapeHtml(est.motivoInsuficiencia || 'Datos insuficientes')}">
-              <i class="bi bi-exclamation-triangle me-1"></i>Datos insuficientes (No confiable)
-            </span>
-            ${est.cantidadSugerida > 0 ? `<small class="text-secondary d-block fs-9 mt-1">+${est.cantidadSugerida} para stock mín.</small>` : ''}
-          `;
-        }
-      }
     });
   }
 }
 
 function ocultarResultadosIa() {
-  const estadoInicial = document.getElementById('iaEstadoInicial');
-  const estadoResultados = document.getElementById('iaEstadoResultados');
-  const estadoCargando = document.getElementById('iaEstadoCargando');
-  const estadoError = document.getElementById('iaEstadoError');
+  bootstrap.Collapse.getOrCreateInstance(document.getElementById('seccionIa'), { toggle: false }).hide();
   const btn = document.getElementById('btnConsultarIa');
-  const btnOcultar = document.getElementById('btnOcultarIa');
-
-  if (estadoResultados) estadoResultados.classList.add('d-none');
-  if (estadoCargando) estadoCargando.classList.add('d-none');
-  if (estadoError) estadoError.classList.add('d-none');
-  if (estadoInicial) estadoInicial.classList.remove('d-none');
-  if (btnOcultar) btnOcultar.classList.add('d-none');
-
   if (btn) {
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-robot me-1"></i> Consultar IA';
   }
-
-  // Restablecer celdas de la tabla principal
-  document.querySelectorAll('.celda-sugerencia-ia').forEach(td => {
-    td.innerHTML = '<span class="text-muted fs-8" title="Presiona \'Consultar IA\' para calcular estimación"><i class="bi bi-dash"></i></span>';
-  });
 }
 
 function escapeHtml(str) {
@@ -654,4 +724,3 @@ window.addEventListener('pageshow', function(event) {
 </script>
 
 <%- include('../partials/footer') %>
-

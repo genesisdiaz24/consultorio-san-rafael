@@ -1103,14 +1103,15 @@ async function ejecutarAccionConfirmada(accionId, usuario) {
       await client.query(
         `INSERT INTO farmacia_movimientos (
           medicamento_id, tipo_movimiento, cantidad,
-          stock_anterior, stock_nuevo, motivo
-        ) VALUES ($1, 'AJUSTE', $2, $3, $4, $5)`,
+          stock_anterior, stock_nuevo, motivo, usuario_id
+        ) VALUES ($1, 'AJUSTE', $2, $3, $4, $5, $6)`,
         [
           accion.medicamentoId,
           Math.abs(accion.diferencia),
           stockPrevio,
           accion.stockNuevo,
           accion.motivo,
+          usuario && usuario.id ? usuario.id : null,
         ]
       );
 
@@ -1183,8 +1184,8 @@ async function ejecutarAccionConfirmada(accionId, usuario) {
       await client.query(
         `INSERT INTO farmacia_movimientos (
           receta_detalle_id, medicamento_id, tipo_movimiento,
-          cantidad, stock_anterior, stock_nuevo, motivo
-        ) VALUES ($1, $2, 'SALIDA_RECETA', $3, $4, $5, $6)`,
+          cantidad, stock_anterior, stock_nuevo, motivo, usuario_id
+        ) VALUES ($1, $2, 'SALIDA_RECETA', $3, $4, $5, $6, $7)`,
         [
           accion.detalleId,
           accion.medicamentoId,
@@ -1192,6 +1193,7 @@ async function ejecutarAccionConfirmada(accionId, usuario) {
           stockPrevio,
           nuevoStock,
           `Despacho receta ${accion.codigoReceta} (Vía Asistente IA)`,
+          usuario && usuario.id ? usuario.id : null,
         ]
       );
 
@@ -1239,14 +1241,15 @@ async function ejecutarAccionConfirmada(accionId, usuario) {
       await client.query(
         `INSERT INTO farmacia_movimientos (
           receta_detalle_id, medicamento_id, tipo_movimiento,
-          cantidad, stock_anterior, stock_nuevo, motivo
-        ) VALUES ($1, $2, 'NO_ENTREGADO', $3, $4, $4, $5)`,
+          cantidad, stock_anterior, stock_nuevo, motivo, usuario_id
+        ) VALUES ($1, $2, 'NO_ENTREGADO', $3, $4, $4, $5, $6)`,
         [
           accion.detalleId,
           detRows[0].medicamento_id || null,
           accion.cantidad,
           accion.stockActual,
           `No entregado vía Asistente IA: ${accion.motivo}`,
+          usuario && usuario.id ? usuario.id : null,
         ]
       );
 

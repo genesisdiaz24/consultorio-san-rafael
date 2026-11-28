@@ -1,70 +1,118 @@
 <%- include('../partials/header') %>
 
+<%
+  // Mismo estilo de etiqueta para todos los tipos; cambian el color y el ícono
+  const TIPOS = {
+    SALIDA_RECETA: { texto: 'Salida por receta', clase: 'bg-success', icono: 'bi-box-arrow-up-right' },
+    ENTRADA_STOCK: { texto: 'Entrada de stock', clase: 'bg-primary', icono: 'bi-box-arrow-in-down' },
+    AJUSTE: { texto: 'Ajuste', clase: 'bg-warning text-dark', icono: 'bi-sliders' },
+    NO_ENTREGADO: { texto: 'No entregado', clase: 'bg-danger', icono: 'bi-x-octagon' },
+    NO_ENTREGADO_SIN_STOCK: { texto: 'No entregado', clase: 'bg-danger', icono: 'bi-x-octagon' },
+  };
+  const ROLES = { FARMACIA: 'Farmacéutico', ADMINISTRADOR: 'Administrador', MEDICO: 'Médico', SECRETARIA: 'Secretaría', RECEPCION: 'Recepción' };
+  const fechaRD = (iso) => formatoFecha(iso + 'T12:00:00');
+%>
+
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
   <div>
     <h1 class="h3 fw-bold text-dark mb-1">
       <i class="bi bi-clock-history text-teal me-2"></i>Auditoría y Movimientos de Farmacia
     </h1>
-    <p class="text-muted mb-0">Registro histórico de salidas por receta, entradas de stock y registros de medicamentos sin existencia.</p>
+    <p class="text-muted mb-0">Salidas por receta, entradas de stock, ajustes y no entregas, con el usuario que las registró.</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 d-print-none">
+    <button type="button" class="btn btn-outline-success fw-semibold" id="btnExportarCsv">
+      <i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportar Excel (CSV)
+    </button>
+    <button type="button" class="btn btn-outline-secondary fw-semibold" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i> Imprimir / PDF
+    </button>
     <a href="/farmacia/inventario" class="btn btn-outline-teal fw-semibold">
       <i class="bi bi-boxes me-1"></i> Ver Inventario
     </a>
   </div>
 </div>
 
+<!-- Filtros (en tiempo real) -->
+<div class="card border-0 shadow-sm mb-4 d-print-none">
+  <div class="card-body p-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-6 col-lg-2">
+        <label for="f_desde" class="form-label fs-8 text-uppercase fw-semibold text-muted mb-1">Desde</label>
+        <input type="date" id="f_desde" class="form-control">
+      </div>
+      <div class="col-6 col-lg-2">
+        <label for="f_hasta" class="form-label fs-8 text-uppercase fw-semibold text-muted mb-1">Hasta</label>
+        <input type="date" id="f_hasta" class="form-control">
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <label for="f_tipo" class="form-label fs-8 text-uppercase fw-semibold text-muted mb-1">Tipo de movimiento</label>
+        <select id="f_tipo" class="form-select">
+          <option value="">Todos</option>
+          <option value="Salida por receta">Salida por receta</option>
+          <option value="Entrada de stock">Entrada de stock</option>
+          <option value="Ajuste">Ajuste</option>
+          <option value="No entregado">No entregado</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <label for="f_medicamento" class="form-label fs-8 text-uppercase fw-semibold text-muted mb-1">Medicamento</label>
+        <select id="f_medicamento" class="form-select">
+          <option value="">Todos</option>
+          <% medicamentosFiltro.forEach(function(nombre) { %>
+            <option value="<%= nombre %>"><%= nombre %></option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="col-12 col-lg-2 text-lg-end">
+        <span class="fs-7 text-muted" id="contadorMov"><%= movimientos.length %> movimiento(s)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card border-0 shadow-sm">
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
+      <table class="table table-hover align-middle mb-0" id="tablaMovimientos">
         <thead class="table-light fs-8 text-uppercase">
           <tr>
-            <th>Fecha y Hora</th>
+            <th class="text-nowrap">Fecha y Hora</th>
             <th>Tipo de Movimiento</th>
             <th>Medicamento</th>
             <th class="text-center">Cantidad</th>
-            <th class="text-center">Stock Antes / Después</th>
-            <th>Motivo / Receta</th>
+            <th class="text-center text-nowrap">Stock Antes / Después</th>
+            <th>Motivo / Receta / Lote</th>
+            <th>Usuario</th>
           </tr>
         </thead>
         <tbody>
           <% if (movimientos && movimientos.length > 0) { %>
             <% movimientos.forEach(function(m) { %>
-              <tr>
-                <td>
-                  <span class="fw-semibold text-dark"><%= formatoFecha(m.fecha) %></span>
-                  <small class="d-block text-muted">
-                    <%= new Date(m.fecha).toLocaleTimeString('es-DO', {hour:'2-digit', minute:'2-digit'}) %>
-                  </small>
+              <%
+                const t = TIPOS[m.tipo_movimiento] || { texto: m.tipo_movimiento, clase: 'bg-secondary', icono: 'bi-dot' };
+                const nombreMed = m.med_nombre || m.receta_med_nombre || 'Medicamento';
+                const rol = m.usuario_rol ? (ROLES[m.usuario_rol] || m.usuario_rol) : '';
+              %>
+              <tr data-fecha="<%= m.fecha_iso %>" data-tipo="<%= t.texto %>" data-medicamento="<%= nombreMed %>"
+                  data-csv="<%= JSON.stringify([m.fecha_iso + ' ' + m.hora_rd, t.texto, nombreMed, m.cantidad, m.stock_anterior, m.stock_nuevo, m.motivo || '', m.codigo_receta || '', m.lote || '', m.usuario_nombre ? (m.usuario_nombre + (rol ? ' (' + rol + ')' : '')) : 'No registrado']) %>">
+                <td class="text-nowrap">
+                  <span class="fw-semibold text-dark"><%= fechaRD(m.fecha_iso) %></span>
+                  <small class="d-block text-muted"><%= m.hora_rd %></small>
                 </td>
                 <td>
-                  <% if (m.tipo_movimiento === 'SALIDA_RECETA') { %>
-                    <span class="badge bg-success py-2 px-3">
-                      <i class="bi bi-box-arrow-up-right me-1"></i> Salida por Receta
-                    </span>
-                  <% } else if (m.tipo_movimiento === 'NO_ENTREGADO_SIN_STOCK') { %>
-                    <span class="badge bg-danger py-2 px-3">
-                      <i class="bi bi-exclamation-triangle-fill me-1"></i> Sin Stock (Derivado Externo)
-                    </span>
-                  <% } else if (m.tipo_movimiento === 'ENTRADA_STOCK') { %>
-                    <span class="badge bg-primary py-2 px-3">
-                      <i class="bi bi-box-arrow-in-down me-1"></i> Entrada de Stock
-                    </span>
-                  <% } else { %>
-                    <span class="badge bg-secondary py-2 px-3"><%= m.tipo_movimiento %></span>
-                  <% } %>
+                  <span class="badge <%= t.clase %> py-2 px-3 text-nowrap">
+                    <i class="bi <%= t.icono %> me-1"></i><%= t.texto %>
+                  </span>
                 </td>
                 <td>
-                  <strong class="text-dark"><%= m.med_nombre || m.receta_med_nombre || 'Medicamento' %></strong>
+                  <strong class="text-dark"><%= nombreMed %></strong>
                   <% if (m.med_codigo) { %>
                     <small class="text-muted d-block font-monospace"><%= m.med_codigo %></small>
                   <% } %>
                 </td>
-                <td class="text-center fw-bold fs-6">
-                  <%= m.cantidad %>
-                </td>
-                <td class="text-center">
+                <td class="text-center fw-bold fs-6"><%= m.cantidad %></td>
+                <td class="text-center text-nowrap">
                   <span class="text-muted font-monospace"><%= m.stock_anterior !== null ? m.stock_anterior : '-' %></span>
                   <i class="bi bi-arrow-right mx-1 text-teal"></i>
                   <span class="fw-bold font-monospace text-dark"><%= m.stock_nuevo !== null ? m.stock_nuevo : '-' %></span>
@@ -74,12 +122,29 @@
                   <% if (m.codigo_receta) { %>
                     <small class="badge bg-light text-dark border font-monospace mt-1">Receta: <%= m.codigo_receta %></small>
                   <% } %>
+                  <% if (m.lote) { %>
+                    <small class="badge bg-light text-dark border font-monospace mt-1">Lote: <%= m.lote %><% if (m.lote_vencimiento) { %> · vence <%= formatoFecha(m.lote_vencimiento) %><% } %></small>
+                  <% } %>
+                </td>
+                <td>
+                  <% if (m.usuario_nombre) { %>
+                    <div class="fw-semibold text-dark fs-7 text-nowrap"><%= m.usuario_nombre %></div>
+                    <small class="text-muted"><%= rol %></small>
+                  <% } else { %>
+                    <small class="text-muted fst-italic">No registrado</small>
+                  <% } %>
                 </td>
               </tr>
             <% }); %>
+            <tr id="filaSinMov" class="d-none">
+              <td colspan="7" class="text-center py-5 text-muted">
+                <i class="bi bi-search fs-1 d-block mb-2 text-teal-light"></i>
+                Ningún movimiento coincide con los filtros.
+              </td>
+            </tr>
           <% } else { %>
             <tr>
-              <td colspan="6" class="text-center py-5 text-muted">
+              <td colspan="7" class="text-center py-5 text-muted">
                 <i class="bi bi-clock-history fs-1 d-block mb-2 text-teal-light"></i>
                 <h6 class="fw-bold text-dark">No hay movimientos registrados</h6>
                 <p class="mb-0">Los despachos y entradas de medicamentos se registrarán aquí automáticamente.</p>
@@ -92,5 +157,49 @@
   </div>
 </div>
 
-<%- include('../partials/footer') %>
+<script>
+(function () {
+  const filas = Array.from(document.querySelectorAll('#tablaMovimientos tbody tr[data-fecha]'));
+  const desde = document.getElementById('f_desde');
+  const hasta = document.getElementById('f_hasta');
+  const tipo = document.getElementById('f_tipo');
+  const med = document.getElementById('f_medicamento');
+  const contador = document.getElementById('contadorMov');
+  const sinMov = document.getElementById('filaSinMov');
 
+  function filtrar() {
+    let visibles = 0;
+    filas.forEach((f) => {
+      const ok = (!desde.value || f.dataset.fecha >= desde.value)
+        && (!hasta.value || f.dataset.fecha <= hasta.value)
+        && (!tipo.value || f.dataset.tipo === tipo.value)
+        && (!med.value || f.dataset.medicamento === med.value);
+      f.classList.toggle('d-none', !ok);
+      if (ok) visibles++;
+    });
+    if (sinMov) sinMov.classList.toggle('d-none', visibles > 0);
+    contador.textContent = `${visibles} movimiento(s)`;
+  }
+  [desde, hasta, tipo, med].forEach((el) => el.addEventListener('input', filtrar));
+
+  // Excel (CSV) con los movimientos visibles (respeta los filtros)
+  document.getElementById('btnExportarCsv').addEventListener('click', () => {
+    const celda = (v) => {
+      let t = String(v === null || v === undefined ? '' : v);
+      if (/^[=+\-@]/.test(t) && !/^-?\d+(\.\d+)?$/.test(t)) t = `'${t}`; // evita fórmulas en Excel
+      return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+    const lineas = [['Fecha', 'Tipo', 'Medicamento', 'Cantidad', 'Stock antes', 'Stock después', 'Motivo', 'Receta', 'Lote', 'Usuario'].join(',')];
+    filas.filter((f) => !f.classList.contains('d-none')).forEach((f) => lineas.push(JSON.parse(f.dataset.csv).map(celda).join(',')));
+    const blob = new Blob(['﻿' + lineas.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `movimientos-farmacia-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  });
+})();
+</script>
+
+<%- include('../partials/footer') %>

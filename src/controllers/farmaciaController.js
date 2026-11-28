@@ -2,6 +2,7 @@ const db = require('../config/db');
 const farmaciaIaService = require('../services/farmaciaIaService');
 const farmaciaChatService = require('../services/farmaciaChatService');
 const cobertura = require('../services/coberturaFarmaciaService');
+const { normalizarFecha, hoyRD } = require('../utils/fechas');
 
 // Vista del Inventario de Medicamentos con Estimación de Demanda IA y Sugerencias de Reposición
 exports.inventario = async (req, res, next) => {
@@ -13,23 +14,14 @@ exports.inventario = async (req, res, next) => {
           WHEN stock_actual <= 0 THEN 'Agotado'
           WHEN stock_actual <= stock_minimo THEN 'Stock Bajo'
           ELSE 'Disponible'
-        END AS estado_stock
+        END AS estado_stock,
+        (fecha_vencimiento - (NOW() AT TIME ZONE 'America/Santo_Domingo')::date) AS dias_para_vencer
       FROM medicamentos
       WHERE activo = true
     `;
+    // Se cargan todos los medicamentos activos: la búsqueda y el estado se filtran en el navegador
+    // mientras se escribe (?q= y ?estado= solo dejan el filtro preseleccionado).
     const params = [];
-
-    if (q && q.trim() !== '') {
-      params.push(`%${q.trim()}%`);
-      queryText += ` AND (nombre ILIKE $1 OR principio_activo ILIKE $1 OR codigo ILIKE $1)`;
-    }
-
-    if (estado === 'agotado') {
-      queryText += ` AND stock_actual <= 0`;
-    } else if (estado === 'bajo') {
-      queryText += ` AND stock_actual > 0 AND stock_actual <= stock_minimo`;
-    }
-
     queryText += ` ORDER BY stock_actual ASC, nombre ASC`;
 
     const { rows: medicamentos } = await db.query(queryText, params);
@@ -133,9 +125,9 @@ exports.crearMedicamento = async (req, res, next) => {
     // Registrar movimiento inicial de stock
     if (parseInt(stock_actual, 10) > 0) {
       await db.query(
-        `INSERT INTO farmacia_movimientos (medicamento_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, motivo)
-         VALUES ($1, 'ENTRADA_STOCK', $2, 0, $2, 'Carga inicial de inventario')`,
-        [result.rows[0].id, parseInt(stock_actual, 10)]
+        `INSERT INTO farmacia_movimientos (medicamento_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, motivo, usuario_id, lote, lote_vencimiento)
+         VALUES ($1, 'ENTRADA_STOCK', $2, 0, $2, 'Carga inicial de inventario', $3, $4, $5)`,
+        [result.rows[0].id, parseInt(stock_actual, 10), req.session.usuario.id, lote ? lote.trim() : null, fecha_vencimiento || null]
       );
     }
 
@@ -146,43 +138,84 @@ exports.crearMedicamento = async (req, res, next) => {
   }
 };
 
-// Reabastecer o ajustar stock de un medicamento
+// Movimiento de Stock: Entrada (compra/donación) o Salida por ajuste (dañado, vencido, pérdida).
+// Todo en una transacción con el medicamento bloqueado: el stock nunca queda negativo y el
+// movimiento queda en el Kardex con el usuario que lo hizo.
 exports.ajustarStock = async (req, res, next) => {
+  const volver = (tipo, msg) => { req.flash(tipo, msg); return res.redirect('/farmacia/inventario'); };
+  const { id } = req.params;
+  const tipo = String(req.body.tipo || '').trim();
+  const cant = Number(req.body.cantidad);
+  const motivo = String(req.body.motivo || '').trim();
+  const lote = String(req.body.lote || '').trim();
+
+  if (!['ENTRADA', 'SALIDA'].includes(tipo)) return volver('error', 'Seleccione el tipo de movimiento.');
+  if (!Number.isInteger(cant) || cant <= 0) return volver('error', 'La cantidad debe ser un número entero mayor que cero.');
+  if (!motivo) return volver('error', 'Indique el motivo del movimiento.');
+
+  let vencimiento = null;
+  if (tipo === 'ENTRADA') {
+    if (!lote) return volver('error', 'En una entrada el número de lote es obligatorio.');
+    vencimiento = normalizarFecha(String(req.body.fecha_vencimiento || ''));
+    if (!vencimiento) return volver('error', 'En una entrada la fecha de vencimiento es obligatoria (DD/MM/AAAA).');
+    if (vencimiento < hoyRD()) return volver('error', 'La fecha de vencimiento del lote no puede ser una fecha pasada.');
+  }
+
+  const client = await db.pool.connect();
   try {
-    const { id } = req.params;
-    const { cantidad_agregar, motivo } = req.body;
+    await client.query('BEGIN');
+    const { rows } = await client.query(`SELECT * FROM medicamentos WHERE id = $1 FOR UPDATE`, [id]);
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return volver('error', 'Medicamento no encontrado.');
+    }
+    const med = rows[0];
+    const stockAnterior = parseInt(med.stock_actual, 10) || 0;
 
-    const cant = parseInt(cantidad_agregar, 10);
-    if (isNaN(cant) || cant <= 0) {
-      req.flash('error', 'La cantidad a agregar debe ser un número positivo.');
-      return res.redirect('/farmacia/inventario');
+    if (tipo === 'SALIDA' && cant > stockAnterior) {
+      await client.query('ROLLBACK');
+      return volver('error', `No se puede registrar la salida: ${med.nombre} tiene ${stockAnterior} unidad(es) y la salida dejaría el stock en negativo.`);
     }
 
-    const { rows: meds } = await db.query(`SELECT * FROM medicamentos WHERE id = $1`, [id]);
-    if (meds.length === 0) {
-      req.flash('error', 'Medicamento no encontrado.');
-      return res.redirect('/farmacia/inventario');
+    const stockNuevo = tipo === 'ENTRADA' ? stockAnterior + cant : stockAnterior - cant;
+
+    if (tipo === 'ENTRADA') {
+      // Un medicamento guarda un solo lote/vencimiento: se muestra el lote que vence primero.
+      // El lote nuevo reemplaza al actual si no quedaba stock, si no había lote o si vence antes.
+      const vencActual = med.fecha_vencimiento ? new Date(med.fecha_vencimiento).toISOString().slice(0, 10) : null;
+      const reemplazar = stockAnterior === 0 || !med.lote || !vencActual || vencimiento < vencActual;
+      await client.query(
+        `UPDATE medicamentos
+            SET stock_actual = $1,
+                lote = CASE WHEN $3 THEN $4 ELSE lote END,
+                fecha_vencimiento = CASE WHEN $3 THEN $5::date ELSE fecha_vencimiento END
+          WHERE id = $2`,
+        [stockNuevo, id, reemplazar, lote, vencimiento]
+      );
+    } else {
+      await client.query(`UPDATE medicamentos SET stock_actual = $1 WHERE id = $2`, [stockNuevo, id]);
     }
 
-    const med = meds[0];
-    const stockAnterior = med.stock_actual;
-    const stockNuevo = stockAnterior + cant;
-
-    await db.query(
-      `UPDATE medicamentos SET stock_actual = $1 WHERE id = $2`,
-      [stockNuevo, id]
+    await client.query(
+      `INSERT INTO farmacia_movimientos
+         (medicamento_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, motivo, usuario_id, lote, lote_vencimiento)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        id, tipo === 'ENTRADA' ? 'ENTRADA_STOCK' : 'AJUSTE', cant, stockAnterior, stockNuevo,
+        tipo === 'ENTRADA' ? motivo : `Salida por ajuste: ${motivo}`,
+        req.session.usuario.id, tipo === 'ENTRADA' ? lote : null, vencimiento,
+      ]
     );
+    await client.query('COMMIT');
 
-    await db.query(
-      `INSERT INTO farmacia_movimientos (medicamento_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, motivo)
-       VALUES ($1, 'ENTRADA_STOCK', $2, $3, $4, $5)`,
-      [id, cant, stockAnterior, stockNuevo, motivo ? motivo.trim() : 'Reabastecimiento de existencias']
-    );
-
-    req.flash('success', `Stock actualizado. Nuevo stock de ${med.nombre}: ${stockNuevo} unidades.`);
-    res.redirect('/farmacia/inventario');
+    return volver('success', tipo === 'ENTRADA'
+      ? `Entrada registrada: +${cant} unid. de ${med.nombre} (lote ${lote}). Existencias: ${stockNuevo}.`
+      : `Salida por ajuste registrada: −${cant} unid. de ${med.nombre}. Existencias: ${stockNuevo}.`);
   } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
     next(error);
+  } finally {
+    client.release();
   }
 };
 
@@ -548,8 +581,8 @@ exports.entregarItem = async (req, res, next) => {
     await client.query(
       `INSERT INTO farmacia_movimientos (
         receta_detalle_id, medicamento_id, tipo_movimiento,
-        cantidad, stock_anterior, stock_nuevo, motivo
-      ) VALUES ($1, $2, 'SALIDA_RECETA', $3, $4, $5, $6)`,
+        cantidad, stock_anterior, stock_nuevo, motivo, usuario_id
+      ) VALUES ($1, $2, 'SALIDA_RECETA', $3, $4, $5, $6, $7)`,
       [
         detalleIdNum,
         med.id,
@@ -557,6 +590,7 @@ exports.entregarItem = async (req, res, next) => {
         stockAnterior,
         nuevoStock,
         `Despacho receta ${item.codigo_receta || '#' + item.receta_id} (${cubiertoArs ? `Cobertura ${desglose.arsNombre} ${desglose.porcentaje}%` : 'Sin cobertura ARS'})`,
+        req.session.usuario.id,
       ]
     );
 
@@ -646,14 +680,15 @@ exports.noEntregarItem = async (req, res, next) => {
     await client.query(
       `INSERT INTO farmacia_movimientos (
         receta_detalle_id, medicamento_id, tipo_movimiento,
-        cantidad, stock_anterior, stock_nuevo, motivo
-      ) VALUES ($1, $2, 'NO_ENTREGADO', $3, $4, $4, $5)`,
+        cantidad, stock_anterior, stock_nuevo, motivo, usuario_id
+      ) VALUES ($1, $2, 'NO_ENTREGADO', $3, $4, $4, $5, $6)`,
       [
         detalleIdNum,
         item.medicamento_id || null,
         item.cantidad_recetada,
         stockActualConservado,
         `No entregado: ${motivo}`,
+        req.session.usuario.id,
       ]
     );
 
@@ -676,23 +711,31 @@ exports.noEntregarItem = async (req, res, next) => {
 // Historial y auditoría de movimientos de farmacia
 exports.movimientos = async (req, res, next) => {
   try {
+    // Fecha y hora en hora de RD (la base de la nube guarda en UTC); los filtros se aplican en el navegador
     const queryText = `
       SELECT fm.*,
              m.nombre as med_nombre,
              m.codigo as med_codigo,
              rd.nombre_medicamento as receta_med_nombre,
-             r.codigo_receta
+             r.codigo_receta,
+             REGEXP_REPLACE(u.nombre, '\\s*\\([^)]*\\)\\s*$', '') AS usuario_nombre,
+             u.rol AS usuario_rol,
+             TO_CHAR(fm.fecha::timestamptz AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha_iso,
+             TO_CHAR(fm.fecha::timestamptz AT TIME ZONE 'America/Santo_Domingo', 'HH12:MI AM') AS hora_rd
       FROM farmacia_movimientos fm
       LEFT JOIN medicamentos m ON fm.medicamento_id = m.id
       LEFT JOIN receta_detalles rd ON fm.receta_detalle_id = rd.id
       LEFT JOIN recetas r ON rd.receta_id = r.id
-      ORDER BY fm.fecha DESC LIMIT 100
+      LEFT JOIN usuarios u ON u.id = fm.usuario_id
+      ORDER BY fm.fecha DESC, fm.id DESC LIMIT 5000
     `;
 
     const { rows: movimientos } = await db.query(queryText);
+    const medicamentosFiltro = [...new Set(movimientos.map((mv) => mv.med_nombre || mv.receta_med_nombre).filter(Boolean))].sort();
 
     res.render('farmacia/movimientos', {
       movimientos,
+      medicamentosFiltro,
       title: 'Historial de Movimientos y Despachos de Farmacia',
     });
   } catch (error) {

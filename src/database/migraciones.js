@@ -221,6 +221,22 @@ const MIGRACIONES = [
          AND NOT EXISTS (SELECT 1 FROM pacientes o WHERE o.identificacion = f.formateada AND o.id <> p.id);
     `,
   },
+  {
+    nombre: '2026-11-farmacia-movimientos-usuario-lote',
+    sql: `
+      -- Quién hizo cada movimiento y, en las entradas, el lote recibido y su vencimiento.
+      -- Los movimientos anteriores quedan sin usuario ("No registrado"): no se inventa quién los hizo.
+      ALTER TABLE farmacia_movimientos ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+      ALTER TABLE farmacia_movimientos ADD COLUMN IF NOT EXISTS lote VARCHAR(50);
+      ALTER TABLE farmacia_movimientos ADD COLUMN IF NOT EXISTS lote_vencimiento DATE;
+      CREATE INDEX IF NOT EXISTS idx_farmacia_mov_fecha ON farmacia_movimientos(fecha);
+
+      -- Lotes inconsistentes ("LOT-AGOTADO" o vacío) → código real LOT-AAAA-NNN (año de alta y id del medicamento)
+      UPDATE medicamentos
+         SET lote = 'LOT-' || EXTRACT(YEAR FROM COALESCE(created_at, CURRENT_TIMESTAMP))::int || '-' || LPAD(id::text, 3, '0')
+       WHERE lote IS NULL OR TRIM(lote) = '' OR UPPER(lote) LIKE '%AGOTADO%';
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {

@@ -763,7 +763,15 @@ const REPORTES = [
     filtros: [
       { nombre: 'desde', etiqueta: 'Desde', tipo: 'fecha', defecto: () => haceDias(30) },
       { nombre: 'hasta', etiqueta: 'Hasta', tipo: 'fecha' },
-      { nombre: 'tipo', etiqueta: 'Tipo', tipo: 'select', opciones: ['SALIDA_RECETA', 'ENTRADA_STOCK', 'AJUSTE', 'NO_ENTREGADO', 'NO_ENTREGADO_SIN_STOCK'] },
+      {
+        nombre: 'tipo', etiqueta: 'Tipo', tipo: 'select',
+        opciones: [
+          { valor: 'SALIDA_RECETA', etiqueta: 'Salida por receta' },
+          { valor: 'ENTRADA_STOCK', etiqueta: 'Entrada de stock' },
+          { valor: 'AJUSTE', etiqueta: 'Ajuste' },
+          { valor: 'NO_ENTREGADO', etiqueta: 'No entregado' },
+        ],
+      },
     ],
     columnas: [
       { clave: 'fecha', etiqueta: 'Fecha', tipo: 'fechahora' },
@@ -774,17 +782,30 @@ const REPORTES = [
       { clave: 'stock_nuevo', etiqueta: 'Stock después', tipo: 'numero' },
       { clave: 'motivo', etiqueta: 'Motivo' },
       { clave: 'receta', etiqueta: 'Receta' },
+      { clave: 'lote', etiqueta: 'Lote' },
+      { clave: 'usuario', etiqueta: 'Usuario' },
     ],
     consulta(f) {
-      const w = new Condiciones().rango(L('fm.fecha'), f).agregar('fm.tipo_movimiento = ?', f.tipo);
+      // "No entregado" agrupa los dos códigos internos (con y sin existencias)
+      const tipos = f.tipo === 'NO_ENTREGADO' ? ['NO_ENTREGADO', 'NO_ENTREGADO_SIN_STOCK'] : (f.tipo ? [f.tipo] : null);
+      const w = new Condiciones().rango(L('fm.fecha'), f).agregar('fm.tipo_movimiento = ANY(?::text[])', tipos);
       return {
-        sql: `SELECT ${L('fm.fecha')} AS fecha, fm.tipo_movimiento AS tipo, COALESCE(m.nombre, rd.nombre_medicamento, '—') AS medicamento,
-                     fm.cantidad, fm.stock_anterior, fm.stock_nuevo, fm.motivo, r.codigo_receta AS receta
+        sql: `SELECT ${L('fm.fecha')} AS fecha,
+                     CASE fm.tipo_movimiento
+                       WHEN 'SALIDA_RECETA' THEN 'Salida por receta'
+                       WHEN 'ENTRADA_STOCK' THEN 'Entrada de stock'
+                       WHEN 'AJUSTE' THEN 'Ajuste'
+                       ELSE 'No entregado'
+                     END AS tipo,
+                     COALESCE(m.nombre, rd.nombre_medicamento, '—') AS medicamento,
+                     fm.cantidad, fm.stock_anterior, fm.stock_nuevo, fm.motivo, r.codigo_receta AS receta, fm.lote,
+                     COALESCE(REGEXP_REPLACE(u.nombre, '\\s*\\([^)]*\\)\\s*$', ''), 'No registrado') AS usuario
               FROM farmacia_movimientos fm
               LEFT JOIN medicamentos m ON m.id = fm.medicamento_id
               LEFT JOIN receta_detalles rd ON rd.id = fm.receta_detalle_id
               LEFT JOIN recetas r ON r.id = rd.receta_id
-              ${w.where()} ORDER BY fm.fecha DESC`,
+              LEFT JOIN usuarios u ON u.id = fm.usuario_id
+              ${w.where()} ORDER BY fm.fecha DESC, fm.id DESC`,
         params: w.params,
       };
     },

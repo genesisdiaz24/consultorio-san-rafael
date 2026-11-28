@@ -43,7 +43,8 @@ async function prepararFiltros(reporte, query) {
         const { rows } = await db.query(FUENTES[filtro.fuente]);
         opciones = rows;
       } else {
-        opciones = filtro.opciones.map((o) => ({ valor: o, etiqueta: o }));
+        // Opciones como texto ("Activo") o como { valor, etiqueta } cuando el código no es legible
+        opciones = filtro.opciones.map((o) => (typeof o === 'string' ? { valor: o, etiqueta: o } : o));
       }
     }
 

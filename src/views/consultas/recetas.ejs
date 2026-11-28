@@ -45,6 +45,7 @@
             <th style="min-width: 180px;">Paciente</th>
             <th>Diagnóstico Clínico</th>
             <th class="text-nowrap" style="width: 1%;">Medicamentos</th>
+            <th class="text-nowrap" style="width: 1%;">Despacho</th>
             <th class="text-end text-nowrap" style="width: 1%;">Acciones</th>
           </tr>
         </thead>
@@ -65,6 +66,17 @@
                     <i class="bi bi-capsule me-1 text-teal"></i><%= r.total_medicamentos %> <%= r.total_medicamentos === 1 ? 'ítem' : 'ítems' %>
                   </span>
                 </td>
+                <td class="text-nowrap">
+                  <%
+                    // Estado de despacho en la farmacia interna (nombres uniformes)
+                    const tot = r.total_medicamentos, ent = r.total_entregados, noEnt = r.total_no_entregados;
+                    let despacho = { texto: 'Pendiente de despacho', clase: 'bg-warning-subtle text-warning-emphasis border border-warning', icono: 'bi-clock' };
+                    if (tot > 0 && ent === tot) despacho = { texto: 'Despachada', clase: 'bg-success-subtle text-success border border-success', icono: 'bi-check-all' };
+                    else if (tot > 0 && ent === 0 && noEnt === tot) despacho = { texto: 'No disponible en farmacia', clase: 'bg-danger-subtle text-danger border border-danger', icono: 'bi-x-circle' };
+                    else if (ent > 0) despacho = { texto: `Despachada parcialmente (${ent}/${tot})`, clase: 'bg-info-subtle text-info-emphasis border border-info', icono: 'bi-pie-chart' };
+                  %>
+                  <span class="badge <%= despacho.clase %>"><i class="bi <%= despacho.icono %> me-1"></i><%= despacho.texto %></span>
+                </td>
                 <td class="text-end text-nowrap">
                   <a href="/consultas/recetas/<%= r.id %>" class="btn btn-sm btn-outline-teal">
                     <i class="bi bi-printer me-1"></i>Ver / Imprimir
@@ -76,14 +88,14 @@
               </tr>
             <% }); %>
             <tr id="fila_sin_resultados" class="d-none">
-              <td colspan="6" class="text-center py-5 text-muted">
+              <td colspan="7" class="text-center py-5 text-muted">
                 <i class="bi bi-search fs-1 d-block mb-2 text-teal-light"></i>
                 Ninguna receta coincide con la búsqueda o el rango de fechas.
               </td>
             </tr>
           <% } else { %>
             <tr>
-              <td colspan="6" class="text-center py-5 text-muted">
+              <td colspan="7" class="text-center py-5 text-muted">
                 <i class="bi bi-file-earmark-medical fs-1 d-block mb-2 text-teal-light"></i>
                 <h6 class="fw-bold text-dark">No hay recetas emitidas</h6>
                 <p class="mb-0">Las recetas generadas en consulta médica aparecerán aquí.</p>

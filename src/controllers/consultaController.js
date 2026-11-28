@@ -719,6 +719,8 @@ exports.listarRecetas = async (req, res, next) => {
              p.apellido as paciente_apellido,
              p.identificacion as paciente_identificacion,
              COUNT(rd.id)::int as total_medicamentos,
+             COUNT(rd.id) FILTER (WHERE rd.estado_dispensacion = 'Entregado')::int as total_entregados,
+             COUNT(rd.id) FILTER (WHERE rd.estado_dispensacion IN ('No entregado', 'No entregado - Sin existencias'))::int as total_no_entregados,
              TO_CHAR(r.fecha_emision::timestamptz AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') as fecha_iso
       FROM recetas r
       INNER JOIN consultas c ON r.consulta_id = c.id

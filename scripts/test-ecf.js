@@ -821,10 +821,12 @@ async function runTests() {
     });
     assert(
       resVistaFarmacia.status === 200 &&
-        resVistaFarmacia.text.includes('Presiona Consultar IA para generar una estimación de demanda') &&
-        resVistaFarmacia.text.includes('Consultar IA') &&
-        resVistaFarmacia.text.includes('Sugerencia IA'),
-      'La vista de inventario no ejecuta la IA al cargar y muestra "Presiona Consultar IA para generar una estimación de demanda"'
+        // La sección de IA llega plegada y sin resultados: solo se despliega y calcula al pulsar "Consultar IA"
+        /id="seccionIa"/.test(resVistaFarmacia.text) &&
+        /class="collapse[^"]*" id="seccionIa"/.test(resVistaFarmacia.text) &&
+        /id="iaEstadoResultados" class="d-none"/.test(resVistaFarmacia.text) &&
+        resVistaFarmacia.text.includes('id="btnConsultarIa"'),
+      'La vista de inventario no ejecuta la IA al cargar: la sección llega plegada hasta pulsar "Consultar IA"'
     );
 
     // Verificar comportamiento entrando con perfil de administrador
@@ -833,7 +835,7 @@ async function runTests() {
     });
     assert(
       resVistaAdmin.status === 200 &&
-        resVistaAdmin.text.includes('Presiona Consultar IA para generar una estimación de demanda') &&
+        /class="collapse[^"]*" id="seccionIa"/.test(resVistaAdmin.text) &&
         resVistaAdmin.text.includes('id="btnConsultarIa"'),
       'Administrador accede a farmacia y la IA permanece en espera sin ejecutarse automáticamente al cargar'
     );

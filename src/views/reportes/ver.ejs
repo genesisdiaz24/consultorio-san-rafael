@@ -18,8 +18,9 @@
 
   function colorEstado(valor) {
     const v = String(valor || '').toLowerCase();
+    // Primero los negativos: "No entregado" e "Inactivo" terminan igual que "Entregado" y "Activo"
+    if (/(cancelada|inactivo|agotado|vencido|failed|declined|rechazado|error|sin_stock|no_entregado|no entregado)/.test(v)) return 'bg-danger';
     if (/(atendida|activo$|completed|entregado$|aceptado|pagado|entrada)/.test(v)) return 'bg-success';
-    if (/(cancelada|inactivo|agotado|vencido|failed|declined|rechazado|error|sin_stock|no_entregado)/.test(v)) return 'bg-danger';
     if (/(programada|pendiente|stock bajo|por vencer|created|pending|approved|proceso|ajuste)/.test(v)) return 'bg-warning text-dark';
     if (/(confirmada|sala|salida)/.test(v)) return 'bg-primary';
     return 'bg-secondary';

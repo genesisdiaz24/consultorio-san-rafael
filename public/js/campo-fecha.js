@@ -54,17 +54,19 @@
     const grupo = input.closest('.input-group');
     const boton = grupo ? grupo.querySelector('[data-abrir-calendario]') : null;
     const ayuda = grupo ? grupo.parentElement.querySelector('.invalid-feedback') : null;
-    const min = input.dataset.min || '1900-01-01';
-    const max = !input.dataset.max || input.dataset.max === 'hoy' ? hoyIso() : input.dataset.max;
-    const obligatorio = input.hasAttribute('required');
+    const hoy = hoyIso();
+    const min = input.dataset.min === 'hoy' ? hoy : (input.dataset.min || '1900-01-01');
+    const max = !input.dataset.max || input.dataset.max === 'hoy' ? hoy : input.dataset.max;
+    const nombre = input.dataset.nombre || 'La fecha';
 
     function error() {
       const valor = input.value.trim();
-      if (!valor) return obligatorio ? 'La fecha de nacimiento es obligatoria.' : '';
+      // "required" se lee cada vez: un formulario puede volver el campo obligatorio u opcional
+      if (!valor) return input.hasAttribute('required') ? `${nombre} es obligatoria.` : '';
       const iso = normalizar(valor);
       if (!iso) return 'Fecha no válida. Escríbala como DD/MM/AAAA (ej: 15/05/1990) o AAAA-MM-DD.';
-      if (iso < min) return `La fecha no puede ser anterior al ${formatoLegible(min)}.`;
-      if (iso > max) return 'La fecha no puede ser una fecha futura.';
+      if (iso < min) return min === hoy ? `${nombre} no puede ser anterior a hoy.` : `${nombre} no puede ser anterior al ${formatoLegible(min)}.`;
+      if (iso > max) return max === hoy ? `${nombre} no puede ser una fecha futura.` : `${nombre} no puede ser posterior al ${formatoLegible(max)}.`;
       return '';
     }
 
@@ -162,7 +164,10 @@
 
     function abrir() {
       const iso = normalizar(input.value);
-      const base = iso || (max < hoyIso() ? max : aIso(anioMax - 30 < anioMin ? anioMin : anioMax - 30, 1, 1));
+      const hoy = hoyIso();
+      // Sin fecha escrita: si el rango empieza hoy (p. ej. vencimientos) se abre en el mes actual;
+      // para fechas pasadas (nacimiento) se abre unos 30 años atrás
+      const base = iso || (min >= hoy ? min : (max < hoy ? max : aIso(anioMax - 30 < anioMin ? anioMin : anioMax - 30, 1, 1)));
       vista = { y: Number(base.slice(0, 4)), m: Number(base.slice(5, 7)) - 1 };
       dibujar();
       panel.classList.add('show');

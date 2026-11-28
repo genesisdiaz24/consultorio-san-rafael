@@ -61,6 +61,7 @@ const MEDICAMENTOS = {
     buscarEnInventario: ['metamizol', 'dipirona'],
     marcas: 'Novalgina, Neo-Melubrina',
     funcion: 'Analgésico y antifebril potente (también alivia cólicos)',
+    requiereReceta: true, // en muchos países solo con receta: no se sugiere desde farmacia
     dosis: '500 mg a 1 g cada 6–8 horas. Máximo 4 g al día.',
     precaucion: 'Puede causar alergia o bajar los glóbulos blancos (raro). No usar si hubo alergia a dipirona ni en embarazo.',
     alternativas: ['acetaminofen', 'ibuprofeno', 'naproxeno'],
@@ -261,6 +262,22 @@ function detectarSintomas(t) {
   return { encontrados, barrigaGeneral };
 }
 
+// Medicamentos que SOLO se despachan con receta médica (nunca se sugieren por síntomas)
+const RECETA_OBLIGATORIA = [
+  { nombre: 'Antibióticos', detectar: /\b(antibiotic\w*|amoxicilin\w*|azitromicin\w*|ciprofloxacin\w*|cefalexin\w*|clindamicin\w*|doxiciclin\w*|claritromicin\w*|levofloxacin\w*|penicilin\w*|metronidazol)\b/ },
+  { nombre: 'Antihipertensivos', detectar: /\b(antihipertensiv\w*|losartan\w*|enalapril|amlodipin\w*|captopril|valsartan|hidroclorotiazida|metoprolol|atenolol|carvedilol)\b/ },
+  { nombre: 'Antidiabéticos', detectar: /\b(metformin\w*|insulin\w*|glibenclamid\w*|glimepirid\w*)\b/ },
+  { nombre: 'Broncodilatadores y corticoides', detectar: /\b(salbutamol|inhalador|prednison\w*|dexametason\w*|betametason\w*)\b/ },
+  { nombre: 'Analgésicos de control', detectar: /\b(tramadol|codein\w*|morfin\w*|metamizol|dipirona|novalgina)\b/ },
+  { nombre: 'Psicofármacos', detectar: /\b(diazepam|alprazolam|clonazepam|lorazepam|sertralin\w*|fluoxetin\w*)\b/ },
+];
+const PATRON_PEDIDO_RECOMENDACION =
+  /\b(recomiend\w*|recomendar|sugier\w*|sugerir|le doy|le damos|puedo dar|podemos dar|darle|sirve para|sirve el|sirve la|que tomar|que le doy|para el dolor|para la|para el)\b/;
+
+function detectarRecetaObligatoria(t) {
+  return RECETA_OBLIGATORIA.find((g) => g.detectar.test(t)) || null;
+}
+
 const PATRON_SUSTITUCION =
   /\b(no hay|no tenemos|no tienen|no queda|no quedan|se acabo|se termino|agotad[oa]|sin existencia|falta|faltan|sustitut[oa]|sustituir|reemplaz\w*|alternativa\w*|en vez de|en lugar de|equivalente|parecido|similar|igual a|otra opcion|otro medicamento|que haga lo mismo|misma funcion)\b/;
 
@@ -271,6 +288,11 @@ function detectarIntencionOrientacion(texto) {
   const t = normalizar(texto);
   const medicamento = detectarMedicamento(t);
   const { encontrados, barrigaGeneral } = detectarSintomas(t);
+
+  const receta = detectarRecetaObligatoria(t);
+  if (receta && (encontrados.length > 0 || barrigaGeneral || PATRON_SUSTITUCION.test(t) || PATRON_PEDIDO_RECOMENDACION.test(t))) {
+    return { tipo: 'RECETA', grupo: receta.nombre, sintomas: encontrados, barrigaGeneral };
+  }
 
   if (medicamento && PATRON_SUSTITUCION.test(t)) {
     return { tipo: 'SUSTITUCION', medicamento, sintomas: encontrados, barrigaGeneral: PATRON_BARRIGA.test(t) };
@@ -305,11 +327,11 @@ async function consultarInventario(claves) {
 }
 
 function etiquetaStock(inv) {
-  if (!inv || !inv.registrado) return '⚪ No registrado en nuestro inventario';
+  if (!inv || !inv.registrado) return '⚪ **No disponible en inventario**';
   if (inv.total <= 0) return '🔴 **AGOTADO** en farmacia';
   const ref = inv.items.find((i) => i.stock_actual > 0);
-  const det = ref ? ` — ${ref.nombre}${ref.concentracion ? ' ' + ref.concentracion : ''}, ubicación: ${ref.ubicacion || 'General'}` : '';
-  return `🟢 **DISPONIBLE** (${inv.total} unid.${det})`;
+  const det = ref ? ` — ${ref.nombre}${ref.concentracion ? ' ' + ref.concentracion : ''}` : '';
+  return `🟢 **DISPONIBLE**: ${inv.total} unid.${det} · 📍 Ubicación: **${(ref && ref.ubicacion) || 'General'}**`;
 }
 
 function bloqueMedicamento(clave, inv, numero) {
@@ -323,40 +345,60 @@ function bloqueMedicamento(clave, inv, numero) {
   );
 }
 
-const AVISO_FINAL =
-  '\n*ℹ️ Orientación general para **adultos**. En niños, embarazadas, adultos mayores o personas con enfermedades crónicas/alergias, la dosis debe indicarla el médico. Lea siempre el prospecto.*';
+const VERIFICAR_ANTES =
+  '🩺 **Antes de sugerir, verifique con el paciente:** edad, alergias (sobre todo a analgésicos o antiinflamatorios), ' +
+  'si está **embarazada o lactando** y qué **medicamentos toma actualmente**. Dosis orientativas solo para adultos.\n\n';
+
+// Cierre obligatorio de toda orientación
+const CIERRE = 'Sugerencia informativa para el farmacéutico. Si los síntomas persisten o son intensos, referir al médico.';
+const AVISO_FINAL = `\n\nℹ️ *${CIERRE}*`;
+
+// Opciones sugeribles: solo venta libre; las del catálogo primero (con existencias), el resto marcadas "No disponible"
+function separarOpciones(claves, inv) {
+  const ventaLibre = claves.filter((c) => !MEDICAMENTOS[c].requiereReceta);
+  return {
+    enCatalogo: ventaLibre.filter((c) => inv[c] && inv[c].registrado),
+    fueraCatalogo: ventaLibre.filter((c) => !(inv[c] && inv[c].registrado)),
+  };
+}
+
+function lineaNoDisponibles(claves) {
+  if (claves.length === 0) return '';
+  return `⚪ **No disponible en inventario:** ${claves.map((c) => MEDICAMENTOS[c].nombre).join(', ')}.\n\n`;
+}
 
 // ============================================================================
 // RESPUESTAS
 // ============================================================================
 
 async function responderSintoma({ sintomas, barrigaGeneral }) {
-  let claves = sintomas;
-  let msg = '';
+  const claves = barrigaGeneral ? ['estomago'] : sintomas;
 
-  if (barrigaGeneral) {
-    claves = ['estomago'];
-  }
-
-  // Inventario de todas las opciones a mostrar
+  // Inventario de todas las opciones posibles
   const todas = [...new Set(claves.flatMap((k) => SINTOMAS[k].opciones))];
   const inv = await consultarInventario(todas);
 
+  let msg = VERIFICAR_ANTES;
   for (const k of claves) {
     const s = SINTOMAS[k];
-    msg += `💊 **${s.titulo} — opciones de medicamento:**\n\n`;
-    s.opciones.forEach((clave, i) => {
+    const { enCatalogo, fueraCatalogo } = separarOpciones(s.opciones, inv);
+    msg += `💊 **${s.titulo} — opciones de venta libre en nuestro catálogo:**\n\n`;
+    if (enCatalogo.length === 0) {
+      msg += 'Ninguna opción de venta libre para este síntoma está en nuestro catálogo.\n\n';
+    }
+    enCatalogo.forEach((clave, i) => {
       msg += bloqueMedicamento(clave, inv, i + 1) + '\n';
     });
+    msg += lineaNoDisponibles(fueraCatalogo);
 
-    // Si la primera opción está agotada, sugerir automáticamente la mejor alternativa disponible
-    const primera = s.opciones[0];
-    if (inv[primera] && inv[primera].total <= 0) {
-      const disponible = s.opciones.slice(1).find((c) => inv[c] && inv[c].total > 0);
-      msg += `🔁 **${MEDICAMENTOS[primera].nombre} no está disponible.** `;
+    // Si la primera opción del catálogo está agotada, indicar la mejor alternativa con existencias
+    const primera = enCatalogo[0];
+    if (primera && inv[primera].total <= 0) {
+      const disponible = enCatalogo.slice(1).find((c) => inv[c].total > 0);
+      msg += `🔁 **${MEDICAMENTOS[primera].nombre} está agotado.** `;
       msg += disponible
         ? `La mejor opción con existencias ahora es **${MEDICAMENTOS[disponible].nombre}**.\n\n`
-        : 'Ninguna de las alternativas tiene existencias en este momento; recomendar adquirirla en farmacia externa.\n\n';
+        : 'Ninguna alternativa del catálogo tiene existencias; recomendar adquirirla en farmacia externa.\n\n';
     }
 
     if (s.consejos) msg += `✅ **Recomendaciones:** ${s.consejos}\n\n`;
@@ -375,8 +417,19 @@ async function responderSintoma({ sintomas, barrigaGeneral }) {
   return { success: true, respuesta: msg, datos: inv, tipo: 'ORIENTACION' };
 }
 
+// Pidieron un medicamento que exige receta: no se sugiere ni se despacha sin receta
+async function responderRecetaObligatoria({ grupo }) {
+  const msg =
+    `⛔ **${grupo}: requieren receta médica.** No se pueden sugerir ni despachar sin una receta del médico.\n\n` +
+    'Si el paciente presenta síntomas que podrían necesitarlos, **refiéralo al médico** para evaluación. ' +
+    'Para síntomas leves puedo indicarle opciones **de venta libre** de nuestro catálogo (por ejemplo: "dolor de cabeza" o "acidez").' +
+    AVISO_FINAL;
+  return { success: true, respuesta: msg, datos: null, tipo: 'RECETA_OBLIGATORIA' };
+}
+
 async function responderSustitucion({ medicamento, sintomas, barrigaGeneral }) {
   const original = MEDICAMENTOS[medicamento];
+  if (original.requiereReceta) return responderRecetaObligatoria({ grupo: original.nombre });
   let alternativas = [...original.alternativas];
 
   // Si hay contexto de dolor de barriga, no ofrecer AINEs como alternativa
@@ -388,19 +441,22 @@ async function responderSustitucion({ medicamento, sintomas, barrigaGeneral }) {
 
   const inv = await consultarInventario([medicamento, ...alternativas]);
 
-  let msg = `🔁 **Sustitutos de ${original.nombre}** (${original.funcion.toLowerCase()})\n\n`;
+  const { enCatalogo, fueraCatalogo } = separarOpciones(alternativas, inv);
+  let msg = VERIFICAR_ANTES + `🔁 **Sustitutos de ${original.nombre}** (${original.funcion.toLowerCase()})\n\n`;
   msg += `Estado del original: ${etiquetaStock(inv[medicamento])}\n\n`;
 
   if (NOTA_MISMO_PRINCIPIO[medicamento]) {
     msg += `🟰 **Mismo medicamento con otro nombre:** ${NOTA_MISMO_PRINCIPIO[medicamento]}\n\n`;
   }
 
-  msg += '💊 **Medicamentos que hacen la misma función:**\n\n';
-  alternativas.forEach((clave, i) => {
+  msg += '💊 **Medicamentos de venta libre de nuestro catálogo que hacen la misma función:**\n\n';
+  if (enCatalogo.length === 0) msg += 'Ninguna alternativa de venta libre está en nuestro catálogo.\n\n';
+  enCatalogo.forEach((clave, i) => {
     msg += bloqueMedicamento(clave, inv, i + 1) + '\n';
   });
+  msg += lineaNoDisponibles(fueraCatalogo);
 
-  const disponible = alternativas.find((c) => inv[c] && inv[c].total > 0);
+  const disponible = enCatalogo.find((c) => inv[c].total > 0);
   if (disponible) {
     msg += `⭐ **Recomendación:** usar **${MEDICAMENTOS[disponible].nombre}**, que sí tiene existencias en nuestra farmacia.\n\n`;
   } else {
@@ -409,7 +465,7 @@ async function responderSustitucion({ medicamento, sintomas, barrigaGeneral }) {
 
   if (medicamento === 'acetaminofen' && !contextoAbdominal) {
     msg +=
-      '📝 **Importante al cambiar de Acetaminofén a un antiinflamatorio (ibuprofeno/naproxeno/aspirina):** tomarlo con comida y no usarlo si la persona tiene gastritis, úlcera, problemas renales, está embarazada o toma anticoagulantes. En esos casos la alternativa más segura es **Metamizol**.\n';
+      '📝 **Importante al cambiar de Acetaminofén a un antiinflamatorio (ibuprofeno/naproxeno/aspirina):** tomarlo con comida y no usarlo si la persona tiene gastritis, úlcera, problemas renales, está embarazada o toma anticoagulantes. En esos casos, referir al médico.\n';
   }
 
   msg += AVISO_FINAL;
@@ -417,6 +473,7 @@ async function responderSustitucion({ medicamento, sintomas, barrigaGeneral }) {
 }
 
 async function responderOrientacion(intencion) {
+  if (intencion.tipo === 'RECETA') return responderRecetaObligatoria(intencion);
   if (intencion.tipo === 'SUSTITUCION') return responderSustitucion(intencion);
   return responderSintoma(intencion);
 }

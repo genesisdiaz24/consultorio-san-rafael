@@ -324,3 +324,7 @@ footer {
   text-align: left;
   line-height: 1.35;
 }
+
+/* Paneles plegables: girar la flecha al expandir */
+[data-bs-toggle="collapse"] .bi-chevron-down { transition: transform 0.2s ease; }
+[data-bs-toggle="collapse"]:not(.collapsed) .bi-chevron-down { transform: rotate(180deg); }

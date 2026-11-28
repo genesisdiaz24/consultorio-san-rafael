@@ -187,6 +187,9 @@ CREATE TABLE IF NOT EXISTS farmacia_movimientos (
     stock_anterior INTEGER,
     stock_nuevo INTEGER,
     motivo TEXT,
+    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL, -- quién hizo el movimiento
+    lote VARCHAR(50),                                           -- en entradas: lote recibido
+    lote_vencimiento DATE,                                      -- en entradas: vencimiento del lote
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

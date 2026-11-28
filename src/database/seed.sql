@@ -68,8 +68,8 @@ VALUES
     ('MED-006', 'Losartán Potásico', 'Losartán', 'Tabletas', '50 mg', 40, 10, 'Estante C-2', 'LOT-2026-F', '2028-03-15'),
     ('MED-007', 'Metformina', 'Metformina Clorhidrato', 'Tabletas', '850 mg', 30, 10, 'Estante C-3', 'LOT-2026-G', '2028-02-28'),
     -- Medicamentos SIN EXISTENCIA (Stock 0) para verificar proceso de receta y derivación externa
-    ('MED-008', 'Azitromicina', 'Azitromicina', 'Tabletas', '500 mg', 0, 10, 'Estante B-2', 'LOT-AGOTADO', '2026-12-31'),
-    ('MED-009', 'Salbutamol Inhalador', 'Salbutamol', 'Aerosol para inhalación', '100 mcg / dosis', 0, 5, 'Estante D-1', 'LOT-AGOTADO', '2026-12-31')
+    ('MED-008', 'Azitromicina', 'Azitromicina', 'Tabletas', '500 mg', 0, 10, 'Estante B-2', 'LOT-2026-008', '2026-12-31'),
+    ('MED-009', 'Salbutamol Inhalador', 'Salbutamol', 'Aerosol para inhalación', '100 mcg / dosis', 0, 5, 'Estante D-1', 'LOT-2026-009', '2026-12-31')
 ON CONFLICT (codigo) DO NOTHING;
 
 -- 5. PACIENTES DE PRUEBA
