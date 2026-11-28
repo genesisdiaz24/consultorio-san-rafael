@@ -314,3 +314,13 @@ footer {
   font-weight: 600;
   color: #64748b;
 }
+
+/* Etiqueta única de alergias (partials/alergias.ejs): mismo tamaño y estilo en todas las pantallas */
+.etiqueta-alergia {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35em 0.6em;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+}

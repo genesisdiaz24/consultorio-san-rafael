@@ -64,6 +64,7 @@
             <th>Orden / Llegada</th>
             <th>Paciente</th>
             <th>Tiempo en Espera</th>
+            <% if (verMotivo) { %><th>Alergias</th><% } %>
             <th>ARS / Seguro</th>
             <th><%= verMotivo ? 'Motivo de la Consulta' : 'Servicio' %></th>
             <th class="text-end">Acción del Médico</th>
@@ -92,6 +93,9 @@
                     <i class="bi bi-hourglass-split me-1"></i><%= c.minutos_espera || 0 %> min
                   </span>
                 </td>
+                <% if (verMotivo) { %>
+                  <td><%- include('../partials/alergias', { texto: c.antecedentes_alergicos }) %></td>
+                <% } %>
                 <td>
                   <% if (c.ars_nombre) { %>
                     <span class="badge bg-teal-subtle text-teal">
@@ -116,7 +120,7 @@
             <% }); %>
           <% } else { %>
             <tr>
-              <td colspan="6" class="text-center py-5 text-muted">
+              <td colspan="<%= verMotivo ? 7 : 6 %>" class="text-center py-5 text-muted">
                 <i class="bi bi-cup-hot fs-1 d-block mb-2 text-secondary opacity-50"></i>
                 <h6 class="fw-bold text-dark">La Sala de Espera está vacía</h6>
                 <p class="mb-3">Cuando los pacientes lleguen a la clínica y se confirme su asistencia, aparecerán listados aquí.</p>

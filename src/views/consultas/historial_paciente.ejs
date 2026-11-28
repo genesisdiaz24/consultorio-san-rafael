@@ -2,7 +2,6 @@
 
 <%
   const edad = calcularEdad(paciente.fecha_nacimiento);
-  const conAlergias = tieneAlergias(paciente.antecedentes_alergicos);
 %>
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -11,7 +10,7 @@
       <i class="bi bi-file-earmark-person-fill text-teal me-2"></i>Historial Clínico: <%= paciente.nombre %> <%= paciente.apellido %>
     </h1>
     <p class="text-muted mb-0">
-      Identificación: <strong><%= paciente.identificacion %></strong> &bull; Género: <%= paciente.genero %>
+      Identificación: <strong><%= (paciente.tipo_documento || 'Cédula') === 'Cédula' ? formatearCedula(paciente.identificacion) : paciente.identificacion %></strong> &bull; Género: <%= paciente.genero %>
       &bull; Nacimiento: <%= formatoFecha(paciente.fecha_nacimiento) %><% if (edad !== null) { %> &middot; <strong><%= edad %> <%= edad === 1 ? 'año' : 'años' %></strong><% } %>
     </p>
   </div>
@@ -39,7 +38,9 @@
       </div>
       <div class="col-12 col-md-3">
         <span class="text-muted text-uppercase fs-8 fw-semibold d-block">Seguro médico (ARS)</span>
-        <% if (paciente.ars_nombre) { %>
+        <% if (paciente.ars_nombre && String(paciente.ars_codigo || '').toUpperCase() === 'PRIV') { %>
+          <span class="fw-bold text-dark">Sin seguro (Privado)</span>
+        <% } else if (paciente.ars_nombre) { %>
           <span class="fw-bold text-dark"><i class="bi bi-shield-check text-teal me-1"></i><%= paciente.ars_nombre %></span>
           <% if (paciente.numero_afiliado) { %><small class="text-muted font-monospace ms-1"><%= paciente.numero_afiliado %></small><% } %>
         <% } else { %>
@@ -61,17 +62,10 @@
 <!-- Antecedentes Clínicos Destacados -->
 <div class="row g-3 mb-4">
   <div class="col-12 col-md-4">
-    <% if (conAlergias) { %>
-      <div class="p-3 rounded-3 bg-danger-subtle border border-danger h-100">
-        <h6 class="fw-bold text-danger mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Alergias Conocidas</h6>
-        <div class="fs-7 fw-bold text-dark"><%= paciente.antecedentes_alergicos %></div>
-      </div>
-    <% } else { %>
-      <div class="p-3 rounded-3 bg-light border h-100">
-        <h6 class="fw-bold text-secondary mb-1"><i class="bi bi-shield-check me-1"></i>Alergias Conocidas</h6>
-        <div class="fs-7 text-dark">Ninguna conocida</div>
-      </div>
-    <% } %>
+    <div class="p-3 rounded-3 bg-light border h-100">
+      <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-capsule-pill me-1"></i>Alergias Conocidas</h6>
+      <%- include('../partials/alergias', { texto: paciente.antecedentes_alergicos }) %>
+    </div>
   </div>
   <div class="col-12 col-md-4">
     <div class="p-3 rounded-3 bg-light border h-100">

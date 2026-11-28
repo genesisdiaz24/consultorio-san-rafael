@@ -170,13 +170,7 @@
                         <span class="badge bg-warning text-dark"><%= c.minutos_espera || 0 %> min</span>
                       </td>
                       <td>
-                        <% if (tieneAlergias(c.antecedentes_alergicos)) { %>
-                          <span class="badge bg-danger-subtle text-danger border border-danger fs-8 text-wrap text-start">
-                            <i class="bi bi-exclamation-triangle-fill me-1"></i><%= c.antecedentes_alergicos %>
-                          </span>
-                        <% } else { %>
-                          <span class="badge bg-light text-secondary border fs-8">Ninguna conocida</span>
-                        <% } %>
+                        <%- include('partials/alergias', { texto: c.antecedentes_alergicos }) %>
                       </td>
                       <td class="text-end">
                         <a href="/consultas/atender?paciente_id=<%= c.paciente_id %>&cita_id=<%= c.id %>" class="btn btn-sm btn-success fw-semibold text-nowrap">

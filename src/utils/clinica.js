@@ -24,4 +24,19 @@ function calcularEdad(fechaNacimiento) {
 
 const TIPOS_SANGRE = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-module.exports = { tieneAlergias, calcularEdad, TIPOS_SANGRE };
+// Cédula dominicana: 11 dígitos con formato 000-0000000-0. Cualquier otro valor se devuelve igual.
+function formatearCedula(texto) {
+  const t = String(texto || '').trim();
+  const digitos = t.replace(/\D/g, '');
+  return digitos.length === 11 && /^[\d\s.-]+$/.test(t)
+    ? `${digitos.slice(0, 3)}-${digitos.slice(3, 10)}-${digitos.slice(10)}`
+    : t;
+}
+
+// Identificación a guardar: las cédulas se normalizan con guiones; pasaportes y otros se dejan como se escribieron
+function normalizarIdentificacion(tipoDocumento, texto) {
+  const t = String(texto || '').trim();
+  return (tipoDocumento || 'Cédula') === 'Cédula' ? formatearCedula(t) : t;
+}
+
+module.exports = { tieneAlergias, calcularEdad, TIPOS_SANGRE, formatearCedula, normalizarIdentificacion };

@@ -45,7 +45,7 @@
 
             <div class="col-12 col-md-5">
               <label for="identificacion" class="form-label fw-semibold fs-7">Número de Identificación <span class="text-danger">*</span></label>
-              <input type="text" name="identificacion" id="identificacion" value="<%= paciente.identificacion || '' %>" class="form-control font-monospace" placeholder="Ej: 001-1234567-8" required>
+              <input type="text" name="identificacion" id="identificacion" value="<%= (paciente.tipo_documento || 'Cédula') === 'Cédula' ? formatearCedula(paciente.identificacion || '') : (paciente.identificacion || '') %>" class="form-control font-monospace" placeholder="Ej: 001-1234567-8" required>
               <div class="form-text fs-8">Evita duplicaciones; verifique antes de guardar.</div>
             </div>
 
@@ -208,6 +208,24 @@
 </div>
 
 <script src="/js/campo-fecha.js"></script>
+<script>
+// Cédula: guiones automáticos 000-0000000-0 mientras se escribe (pasaportes y otros se dejan libres)
+(function () {
+  const tipo = document.getElementById('tipo_documento');
+  const ident = document.getElementById('identificacion');
+  if (!tipo || !ident) return;
+  function formatear(forzar) {
+    if (tipo.value !== 'Cédula') return;
+    const d = ident.value.replace(/\D/g, '').slice(0, 11);
+    if (!forzar && !/^[\d\s.-]*$/.test(ident.value)) return; // contiene letras: no es una cédula
+    ident.value = d.length > 10 ? `${d.slice(0, 3)}-${d.slice(3, 10)}-${d.slice(10)}`
+      : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d;
+  }
+  ident.addEventListener('input', (e) => { if (!e.inputType || e.inputType.startsWith('insert')) formatear(false); });
+  ident.addEventListener('blur', () => formatear(false));
+  tipo.addEventListener('change', () => formatear(false));
+})();
+</script>
 
 <%- include('../partials/footer') %>
 

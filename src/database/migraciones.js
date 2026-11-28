@@ -201,6 +201,26 @@ const MIGRACIONES = [
        WHERE m.viejo <> m.nuevo AND fm.motivo LIKE '%receta ' || m.viejo || ' %';
     `,
   },
+  {
+    nombre: '2026-11-cedulas-con-guiones',
+    sql: `
+      -- Cédulas (11 dígitos) al formato 000-0000000-0. Solo tipo "Cédula" (pasaportes no se tocan).
+      -- Si el formato resultante ya existe en otro paciente (registro duplicado), esa fila no se cambia.
+      UPDATE pacientes p
+         SET identificacion = f.formateada
+        FROM (
+          SELECT id,
+                 SUBSTRING(d FROM 1 FOR 3) || '-' || SUBSTRING(d FROM 4 FOR 7) || '-' || SUBSTRING(d FROM 11 FOR 1) AS formateada
+          FROM (SELECT id, REGEXP_REPLACE(identificacion, '[^0-9]', '', 'g') AS d, identificacion, tipo_documento FROM pacientes) t
+          WHERE COALESCE(tipo_documento, 'Cédula') = 'Cédula'
+            AND LENGTH(d) = 11
+            AND identificacion ~ '^[0-9 .-]+$'
+        ) f
+       WHERE p.id = f.id
+         AND p.identificacion <> f.formateada
+         AND NOT EXISTS (SELECT 1 FROM pacientes o WHERE o.identificacion = f.formateada AND o.id <> p.id);
+    `,
+  },
 ];
 
 async function ejecutarMigraciones() {

@@ -638,9 +638,9 @@ exports.historialClinico = async (req, res, next) => {
   try {
     const { q } = req.query;
     let queryText = `
-      SELECT p.id, p.nombre, p.apellido, p.identificacion, p.fecha_nacimiento, p.genero,
+      SELECT p.id, p.nombre, p.apellido, p.identificacion, p.tipo_documento, p.fecha_nacimiento, p.genero,
              p.telefono, p.antecedentes_alergicos, p.antecedentes_personales,
-              a.nombre as ars_nombre,
+              a.nombre as ars_nombre, a.codigo as ars_codigo,
               COUNT(DISTINCT c.id) as total_consultas,
               MAX(c.fecha_consulta) as ultima_consulta
       FROM pacientes p
@@ -653,7 +653,8 @@ exports.historialClinico = async (req, res, next) => {
       params.push(`%${q.trim()}%`);
       queryText += ` AND (p.nombre ILIKE $1 OR p.apellido ILIKE $1 OR p.identificacion ILIKE $1 OR p.telefono ILIKE $1)`;
     }
-    queryText += ` GROUP BY p.id, a.nombre ORDER BY ultima_consulta DESC NULLS LAST, p.nombre ASC LIMIT 100`;
+    // El filtro por texto se hace en el navegador mientras se escribe (?q= se mantiene por compatibilidad)
+    queryText += ` GROUP BY p.id, a.nombre, a.codigo ORDER BY ultima_consulta DESC NULLS LAST, p.nombre ASC LIMIT 2000`;
 
     const { rows: pacientes } = await db.query(queryText, params);
     res.render('consultas/historial', {
@@ -671,7 +672,7 @@ exports.verHistorialPaciente = async (req, res, next) => {
   try {
     const { pacienteId } = req.params;
     const { rows: pRows } = await db.query(
-      `SELECT p.*, a.nombre AS ars_nombre
+      `SELECT p.*, a.nombre AS ars_nombre, a.codigo AS ars_codigo
        FROM pacientes p
        LEFT JOIN ars a ON p.ars_id = a.id
        WHERE p.id = $1`,

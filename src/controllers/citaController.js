@@ -202,6 +202,9 @@ exports.confirmarLlegada = async (req, res, next) => {
 // Vista de Sala de Espera (Monitor para Recepción y Médico)
 exports.salaEspera = async (req, res, next) => {
   try {
+    // Las alergias son información clínica: solo se consultan para el médico y el administrador
+    const rol = req.session && req.session.usuario ? req.session.usuario.rol : '';
+    const alergias = ['MEDICO', 'ADMINISTRADOR'].includes(rol) ? 'p.antecedentes_alergicos' : 'NULL';
     const queryText = `
       SELECT c.*,
              p.id AS paciente_id,
@@ -209,6 +212,7 @@ exports.salaEspera = async (req, res, next) => {
              p.apellido AS paciente_apellido,
              p.identificacion AS paciente_identificacion,
              p.telefono AS paciente_telefono,
+             ${alergias} AS antecedentes_alergicos,
              a.nombre AS ars_nombre,
              s.nombre AS servicio_nombre,
              ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - c.fecha_llegada)) / 60) AS minutos_espera

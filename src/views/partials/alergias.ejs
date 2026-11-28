@@ -1,0 +1,12 @@
+<%#
+  Componente único de alergias. Uso: include('partials/alergias', { texto: paciente.antecedentes_alergicos })
+  - Con alergias: etiqueta roja con ícono de advertencia y el texto registrado.
+  - Sin alergias (vacío, "Ninguna conocida", "Niega", "N/A"...): etiqueta gris "Sin alergias conocidas".
+%>
+<% if (tieneAlergias(typeof texto !== 'undefined' ? texto : '')) { %>
+  <span class="badge etiqueta-alergia bg-danger-subtle text-danger border border-danger">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i><%= String(texto).trim() %>
+  </span>
+<% } else { %>
+  <span class="badge etiqueta-alergia bg-light text-secondary border">Sin alergias conocidas</span>
+<% } %>

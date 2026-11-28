@@ -9,7 +9,7 @@ require('dotenv').config();
 const { helmetConfig, corsConfig, csrfMiddleware } = require('./middleware/security');
 const { verificarInactividad, requiereAutenticacion } = require('./middleware/auth');
 const { liquidarArs } = require('../public/js/liquidacion-ars');
-const { tieneAlergias, calcularEdad, TIPOS_SANGRE } = require('./utils/clinica');
+const { tieneAlergias, calcularEdad, TIPOS_SANGRE, formatearCedula } = require('./utils/clinica');
 
 const app = express();
 const esProduccion = process.env.NODE_ENV === 'production';
@@ -129,6 +129,7 @@ app.use((req, res, next) => {
   res.locals.tieneAlergias = tieneAlergias;
   res.locals.calcularEdad = calcularEdad;
   res.locals.TIPOS_SANGRE = TIPOS_SANGRE;
+  res.locals.formatearCedula = formatearCedula;
 
   // Helper para formatear fechas
   res.locals.formatoFecha = (fecha) => {

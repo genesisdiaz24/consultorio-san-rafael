@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { validarFechaNacimiento } = require('../utils/fechas');
+const { normalizarIdentificacion } = require('../utils/clinica');
 
 // Listar pacientes con filtro de búsqueda
 exports.listar = async (req, res, next) => {
@@ -90,7 +91,7 @@ exports.crear = async (req, res, next) => {
     }
 
     // Control estricto de duplicados por identificación
-    const idNormalizada = identificacion.trim();
+    const idNormalizada = normalizarIdentificacion(tipo_documento, identificacion); // cédula → 000-0000000-0
     const { rows: duplicados } = await db.query(
       `SELECT id, nombre, apellido, identificacion FROM pacientes WHERE identificacion = $1`,
       [idNormalizada]
@@ -299,7 +300,7 @@ exports.actualizar = async (req, res, next) => {
       antecedentes_familiares,
     } = req.body;
 
-    const idNormalizada = identificacion.trim();
+    const idNormalizada = normalizarIdentificacion(tipo_documento, identificacion); // cédula → 000-0000000-0
 
     // Fecha de nacimiento: DD/MM/AAAA o AAAA-MM-DD, entre 1900 y hoy
     const fechaNac = validarFechaNacimiento(fecha_nacimiento);
